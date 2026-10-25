@@ -113,6 +113,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default="configs/phase1.yaml")
     ap.add_argument("--out", default="data/swg")
+    ap.add_argument("--manifest", help="Manifest path (default: <out>/manifest.csv)")
     ap.add_argument("--metadata", help="Use a local COCO-CT .json/.zip instead of downloading")
     ap.add_argument("--no-images", action="store_true", help="Write the manifest only")
     args = ap.parse_args()
@@ -187,7 +188,7 @@ def main() -> int:
         "seq_gt",
         "seq_group",
     ]
-    manifest = out / "manifest.csv"
+    manifest = Path(args.manifest) if args.manifest else out / "manifest.csv"
     sample[cols].to_csv(manifest, index=False)
     n_anim = (sample["seq_gt"] == GT_ANIMAL).sum()
     print(
