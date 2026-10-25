@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghats-wildlife-ai"
+version = "0.1.0"
+description = "Camera-trap intelligence for the Western Ghats: detection, species ID, re-identification, search and edge deployment."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas>=2.0",
+    "matplotlib",
+    "pyyaml",
+    "requests",
+    "tqdm",
+    "pillow",
+]
+
+[project.optional-dependencies]
+# The detector stack is heavy (torch + ultralytics); keep it optional so the
+# metrics code and tests install in seconds.
+# soundfile + librosa: PytorchWildlife 1.3.0 imports them at load but does not declare them.
+detect = ["PytorchWildlife>=1.3", "soundfile", "librosa"]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120

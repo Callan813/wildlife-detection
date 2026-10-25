@@ -1,0 +1,15 @@
+data/
+outputs/
+*.pt
+*.onnx
+*.part
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+# Reports are small and worth committing, except the big frame-level dump
+reports/**/frame_scores.csv
+
+# Local assistant notes, not part of the project
+CLAUDE.md

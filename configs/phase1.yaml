@@ -1,0 +1,85 @@
+# Phase 1: detection + empty-frame filtering
+#
+# Dataset: SWG Camera Traps 2018-2020 (Vietnam & Laos, LILA BC).
+# Why this one: it is the closest public match to Western Ghats conditions --
+# dense tropical forest, IR night shots, and many of the same genera
+# (wild pig, sambar, muntjac, civets, leopard cat, mouse deer, pangolin).
+# License: CDLA-Permissive-1.0. Cite: SWG (2021), Northern and Central
+# Annamites Camera Traps 2.0, IUCN SSC Asian Wild Cattle Specialist Group.
+
+dataset:
+  name: swg
+  metadata_url: https://storage.googleapis.com/public-datasets-lila/swg-camera-traps/swg_camera_traps.zip
+  # Swap for the AWS or Azure mirror if GCP is slow from your network:
+  #   http://us-west-2.opendata.source.coop.s3.amazonaws.com/agentmorris/lila-wildlife/swg-camera-traps/
+  #   https://lilawildlife.blob.core.windows.net/lila-wildlife/swg-camera-traps/
+  image_base_url: https://storage.googleapis.com/public-datasets-lila/swg-camera-traps/
+
+  # Labels that are not usable ground truth for "is there an animal?"
+  exclude_labels: [problem, blurred, ignore, human, domestic_dog, insect, invertebrate]
+  empty_label: empty
+
+  # LILA label -> Western Ghats group. Only these sequences are sampled as
+  # "animal". Groups are proxies: e.g. SWG's red muntjac stands in for the
+  # Indian muntjac (barking deer) found in Goa.
+  species_groups:
+    eurasian_wild_pig: wild_boar
+    sambar: sambar
+    red_muntjac: barking_deer
+    large_antlered_muntjac: barking_deer
+    unidentified_muntjac: barking_deer
+    roosevelts_muntjac_group: barking_deer
+    chevrotain: mouse_deer
+    common_palm_civet: civet
+    masked_palm_civet: civet
+    large_indian_civet: civet
+    unidentified_palm_civet: civet
+    crab_eating_mongoose: mongoose
+    leopard_cat: small_cat
+    marbled_cat: small_cat
+    golden_cat: small_cat
+    yellow_throated_marten: marten  # proxy for the Nilgiri marten (Ghats endemic)
+    asiatic_black_bear: bear        # bears: proxies for the sloth bear
+    sun_bear: bear
+    pangolin: pangolin
+    malayan_porcupine: porcupine
+    asiatic_brush_tailed_porcupine: porcupine
+    assam_or_rhesus_macaque: macaque
+    unidentified_macaque: macaque
+    stump_tailed_macaque: macaque
+    pig_tailed_macaque: macaque
+    macaque_not_stump_tailed: macaque
+    red_cheeked_squirrel: squirrel
+    black_giant_squirrel: squirrel  # proxy for the Malabar giant squirrel
+    giant_flying_squirrel: squirrel
+    red_junglefowl: junglefowl
+    unidentified_murid: rodent       # small animals: the hardest case for detectors
+
+sampling:
+  # Sampling unit is a whole sequence (one camera trigger), so bursts stay intact.
+  n_animal_sequences: 600
+  n_empty_sequences: 600
+  max_sequences_per_group: 60       # stops wild pig from dominating
+  max_sequences_per_location: 8     # spreads the sample across many cameras
+  seed: 42
+  download_workers: 16
+
+detector:
+  # MegaDetectorV6MIT is MIT-licensed (safe for commercial use).
+  # Alternatives: class MegaDetectorV6 with version MDV6-yolov9-c (AGPL via
+  # Ultralytics) or MegaDetectorV6Apache with MDV6-apa-rtdetr-c.
+  class: MegaDetectorV6MIT
+  version: MDV6-mit-yolov9-c
+  device: auto                      # auto | cpu | cuda
+  # Keep everything above a very low floor; thresholds are swept in evaluation.
+  conf_floor: 0.01
+
+events:
+  # Used only when a sequence id is missing: frames from the same camera
+  # closer together than this are treated as one trigger event.
+  max_gap_seconds: 120
+
+evaluation:
+  thresholds: [0.01, 0.02, 0.05, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  # Operating point: highest threshold that still keeps this share of animal events.
+  target_recall: 0.98

@@ -1,0 +1,13 @@
+# Everything for Phase 1. Install with:  pip install -r requirements.txt && pip install -e .
+# For a GPU, install the matching torch build first: https://pytorch.org/get-started/locally/
+PytorchWildlife>=1.3
+soundfile   # undeclared PytorchWildlife 1.3.0 deps
+librosa
+numpy
+pandas>=2.0
+matplotlib
+pyyaml
+requests
+tqdm
+pillow
+pytest

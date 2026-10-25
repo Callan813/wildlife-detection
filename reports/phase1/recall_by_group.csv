@@ -1,0 +1,16 @@
+group,n,recall
+porcupine,41,0.9512195121951219
+marten,32,0.96875
+junglefowl,36,0.9722222222222222
+small_cat,41,0.975609756097561
+civet,42,0.9761904761904762
+mongoose,42,0.9761904761904762
+squirrel,42,0.9761904761904762
+barking_deer,43,1.0
+sambar,43,1.0
+wild_boar,43,1.0
+bear,42,1.0
+macaque,42,1.0
+pangolin,41,1.0
+rodent,41,1.0
+mouse_deer,29,1.0
