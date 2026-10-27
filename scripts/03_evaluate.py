@@ -158,7 +158,7 @@ def write_summary(r: dict, path: Path, target_recall: float) -> None:
     lat = r["latency"]
     lines += [
         "",
-        "## Latency (this machine, single image, includes image decode)",
+        "## Latency (this machine, per image, includes image decode; batched runs report batch time / batch size)",
         "",
         f"Mean {lat['mean_ms']:.0f} ms, median {lat['median_ms']:.0f} ms, p95 {lat['p95_ms']:.0f} ms.",
         "",
