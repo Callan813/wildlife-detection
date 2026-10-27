@@ -89,6 +89,8 @@ def main() -> int:
     ap.add_argument("--out", default="outputs/phase2/classifier")
     ap.add_argument("--reports", default="reports/phase2")
     ap.add_argument("--epochs", type=int, help="Override the config")
+    ap.add_argument("--label-smoothing", type=float, help="Override the config")
+    ap.add_argument("--tag", default="", help="Suffix for the report files, e.g. _nols")
     ap.add_argument("--limit", type=int, help="Use only N crops per split (quick smoke test)")
     ap.add_argument("--workers", type=int, default=4, help="Image decoding processes")
     args = ap.parse_args()
@@ -99,6 +101,7 @@ def main() -> int:
 
     c = load_config(args.config)["classifier"]
     epochs = args.epochs or c["epochs"]
+    smoothing = c["label_smoothing"] if args.label_smoothing is None else args.label_smoothing
     random.seed(c["seed"])
     np.random.seed(c["seed"])
     torch.manual_seed(c["seed"])
@@ -138,7 +141,7 @@ def main() -> int:
     val_dl = loader(val_ok, tf_test, shuffle=False)
 
     weights = torch.tensor(class_weights(counts.clip(lower=1), c["class_weight_power"]), dtype=torch.float32)
-    loss_fn = torch.nn.CrossEntropyLoss(weight=weights.to(device), label_smoothing=c["label_smoothing"])
+    loss_fn = torch.nn.CrossEntropyLoss(weight=weights.to(device), label_smoothing=smoothing)
     opt = torch.optim.AdamW(model.parameters(), lr=c["lr"], weight_decay=c["weight_decay"])
     total = epochs * len(train_dl)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: lr_at(s, total, int(c["warmup_epochs"] * len(train_dl))))
@@ -192,15 +195,15 @@ def main() -> int:
 
     reports = Path(args.reports)
     reports.mkdir(parents=True, exist_ok=True)
-    rep.to_csv(reports / "classifier_test.csv", index=False)
-    cm.to_csv(reports / "confusion_test.csv")
+    rep.to_csv(reports / f"classifier_test{args.tag}.csv", index=False)
+    cm.to_csv(reports / f"confusion_test{args.tag}.csv")
     worst = rep.iloc[:-1][rep.iloc[:-1]["support"] > 0].sort_values("f1")
     n_cams = test["location"].nunique()
     acc = (y_true == y_pred).mean()
     lines = [
         "# Phase 2 results: species classifier on detector crops",
         "",
-        f"Model: `{c['model']}`, fine-tuned {epochs} epochs on {len(train):,} crops from train cameras.",
+        f"Model: `{c['model']}`, {epochs} epochs on {len(train):,} train-camera crops, label smoothing {smoothing}.",
         f"Test: {len(test):,} crops (detector conf >= 0.2 or background) from {n_cams} cameras never seen in training.",
         "",
         f"**Test macro F1 {rep.iloc[-1]['f1']:.3f}**, accuracy {acc:.3f} (best val macro F1 {best_f1:.3f}).",
@@ -214,7 +217,7 @@ def main() -> int:
         "",
         "Classes with fewer than ~50 test crops have noisy F1: one or two crops move it by several points.",
     ]
-    (reports / "classifier_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (reports / f"classifier_summary{args.tag}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 0
 
