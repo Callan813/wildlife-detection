@@ -78,6 +78,96 @@ events:
   max_gap_seconds: 120
 
 evaluation:
-  thresholds: [0.01, 0.02, 0.05, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  thresholds: [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
   # Operating point: highest threshold that still keeps this share of animal events.
   target_recall: 0.98
+
+crops:
+  # Boxes below min_conf are dropped; this is the Phase 1 detector floor.
+  min_conf: 0.02
+  # In animal events, only boxes this sure are used to train (weaker ones may be
+  # a leaf next to the animal). They are still written, for evaluation.
+  train_min_conf: 0.2
+  max_per_image: 5
+  pad: 0.1                          # context around the box, share of box size per side
+  min_side: 32                      # px, before resizing
+  max_side: 384                     # px, longest side of the saved crop
+  jpeg_quality: 90
+  # Whole camera locations go to one split, so the model cannot learn backgrounds.
+  val_frac: 0.15
+  test_frac: 0.15
+  seed: 42
+
+classifier:
+  # ConvNeXt-Tiny pretrained on ImageNet-22k (21k classes, many animals), loaded through timm.
+  # Small enough to fine-tune on a 4 GB laptop GPU with mixed precision.
+  model: convnext_tiny.fb_in22k
+  image_size: 224
+  epochs: 12
+  batch_size: 32
+  lr: 1.0e-4                        # low: we adjust pretrained weights, not learn from scratch
+  weight_decay: 0.05
+  warmup_epochs: 1
+  label_smoothing: 0.1
+  # Loss weight per class = (1 / count) ** power. 0 = no weighting, 1 = fully balanced.
+  # 0.5 helps rare classes (pangolin: 123 crops) without letting them dominate.
+  class_weight_power: 0.5
+  seed: 42
+
+baselines:
+  # Off-the-shelf classifiers run on the same val/test crops (tight boxes cut from the original
+  # frames, as they were trained), with their labels mapped onto our groups. A group a model
+  # cannot name is left out of that model's per-class comparison.
+  speciesnet:
+    # Google SpeciesNet v4.0.2a crop classifier (EfficientNetV2-M, 2,498 labels, Apache-2.0).
+    # Weights from huggingface.co/Addax-Data-Science/SPECIESNET-v4-0-2-A.
+    # Its labels are taxonomy strings "uuid;class;order;family;genus;species;common name".
+    # Rules are tried in order; the first matching taxonomy level wins, anything else is "other".
+    dir: data/baselines/speciesnet
+    weights: always_crop_99710272_22x8_v12_epoch_00148.pt
+    labels: labels.txt
+    rules:
+      - {common: blank, group: background}
+      - {genus: macaca, group: macaque}
+      - {genus: muntiacus, group: barking_deer}
+      - {genus: rusa, group: sambar}
+      - {genus: martes, group: marten}
+      - {genus: gallus, group: junglefowl}
+      - {genus: prionailurus, group: small_cat}
+      - {genus: pardofelis, group: small_cat}
+      - {genus: catopuma, group: small_cat}
+      - {family: suidae, group: wild_boar}
+      - {family: tragulidae, group: mouse_deer}
+      - {family: viverridae, group: civet}
+      - {family: herpestidae, group: mongoose}
+      - {family: ursidae, group: bear}
+      - {family: manidae, group: pangolin}
+      - {family: hystricidae, group: porcupine}
+      - {family: sciuridae, group: squirrel}
+      - {family: muridae, group: rodent}
+  ind-ads:
+    # Wildlife Conservation Trust Central India model (Addax Data Science): the SpeciesNet backbone,
+    # frozen, plus a head trained on 1.1M Central Indian images, 40 classes.
+    # License CC-BY-NC-4.0: fine as an evaluation baseline, not for anything commercial.
+    # Weights from huggingface.co/Addax-Data-Science/IND-ADS-v1.
+    dir: data/baselines/ind-ads
+    backbone: always_crop_99710272_22x8_v12_epoch_00148.pt
+    weights: final-20260521.pt
+    classes:
+      false detection: background
+      wild pig: wild_boar
+      sambar: sambar
+      muntjac: barking_deer
+      small indian civet: civet
+      palm civet: civet
+      ruddy mongoose: mongoose
+      indian grey mongoose: mongoose
+      rusty spotted cat: small_cat
+      jungle cat: small_cat
+      sloth bear: bear
+      pangolin: pangolin
+      porcupine: porcupine
+      rhesus macaque: macaque
+      bonnet macaque: macaque
+      birds: junglefowl          # coarse: the only birds in our sample are junglefowl
+      peafowl: junglefowl
