@@ -2,14 +2,17 @@
 
     python scripts/09_event_eval.py --config configs/phase2.yaml
 
-Every val/test trigger event gets one score per method:
-  detector            max detector confidence over the event's boxes (the Phase 1 rule)
-  <model>             max P(not background) over the event's boxes
-  <model> x detector  max of confidence x P(not background): a box must convince both
-Events with no box at all score 0. For each method the threshold that keeps 98% of
-animal events is picked on val and applied unchanged to test.
+Every box gets one score per method:
+  detector            detector confidence (the Phase 1 rule)
+  <model>             P(not background) from a crop classifier
+  <model> x detector  confidence x P(not background): a box must convince both
+and every val/test trigger event takes either its best box score or its second-best
+(an empty event full of leaves is then not kept alive by its single worst leaf; events
+with one box keep that box's score). Events with no box score 0. For each method the
+threshold that keeps the target share of animal events is picked on val and applied
+unchanged to test.
 
-Models are our classifier (outputs/phase2/classifier/predictions.csv) and any baseline
+Models are our classifiers (--ours name=predictions.csv, several allowed) and any baseline
 that scripts/08_run_baselines.py has scored. Only crops scored by every model are used,
 so all methods see exactly the same boxes. Also compares per-class F1 on the classes
 every model can name. Writes reports/phase2/event_eval.{md,csv}.
@@ -27,6 +30,7 @@ import pandas as pd
 from ghats.classify import per_class_report
 from ghats.config import load_config
 from ghats.crops import BACKGROUND
+from ghats.events import kth_box_score
 from ghats.metrics import recall_by_group, threshold_for_recall, threshold_sweep
 
 
@@ -39,9 +43,12 @@ def load_events(manifest: Path, splits: Path) -> pd.DataFrame:
     return ev.rename(columns={"seq_gt": "gt", "seq_group": "group"}).reset_index(drop=True)
 
 
-def event_scores(crops: pd.DataFrame, score: pd.Series, events: pd.DataFrame) -> pd.Series:
-    best = score.groupby(crops["seq_key"]).max()
-    return events["seq_key"].map(best).fillna(0.0)
+AGGREGATIONS = {"best box": 1, "2nd box": 2}
+
+
+def event_scores(crops: pd.DataFrame, score: pd.Series, events: pd.DataFrame, k: int) -> pd.Series:
+    per_event = kth_box_score(score, crops["seq_key"], k)
+    return events["seq_key"].map(per_event).fillna(0.0)
 
 
 def markdown(df: pd.DataFrame, fmt) -> str:
@@ -69,17 +76,29 @@ def main() -> int:
     ap.add_argument("--config", default="configs/phase2.yaml")
     ap.add_argument("--manifest", default="data/swg/manifest_phase2.csv")
     ap.add_argument("--splits", default="data/crops/splits.csv")
-    ap.add_argument("--ours", default="outputs/phase2/classifier/predictions.csv")
+    ap.add_argument(
+        "--ours",
+        nargs="+",
+        default=[
+            "ours=outputs/phase2/classifier/predictions.csv",
+            "ours-nols=outputs/phase2/classifier_nols/predictions.csv",
+        ],
+        help="name=path of our classifiers' predictions; missing files are skipped",
+    )
     ap.add_argument("--baselines", default="outputs/phase2/baselines")
     ap.add_argument("--reports", default="reports/phase2")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
     target = cfg["evaluation"]["target_recall"]
-    groups = sorted(pd.read_csv(args.ours, nrows=0).filter(regex="^p_").columns.str[2:])
-
-    models = {"ours": pd.read_csv(args.ours)}
-    covers = {"ours": set(groups)}
+    models, covers = {}, {}
+    for spec in args.ours:
+        name, path = spec.split("=", 1)
+        if Path(path).exists():
+            models[name] = pd.read_csv(path)
+            covers[name] = set(models[name].filter(regex="^p_").columns.str[2:])
+        else:
+            print(f"(no {path}, skipping {name})")
     for name, b in cfg.get("baselines", {}).items():
         path = Path(args.baselines) / name / "predictions.csv"
         if path.exists():
@@ -92,7 +111,7 @@ def main() -> int:
     # Same boxes for every method.
     shared = set.intersection(*(set(df["crop_id"]) for df in models.values()))
     models = {n: df[df["crop_id"].isin(shared)].set_index("crop_id").sort_index() for n, df in models.items()}
-    crops = models["ours"]
+    crops = next(iter(models.values()))
     events = load_events(Path(args.manifest), Path(args.splits))
     print(f"{len(shared):,} crops in {crops['seq_key'].nunique():,} events; models: {', '.join(models)}")
 
@@ -102,16 +121,27 @@ def main() -> int:
         methods[name] = p_animal
         methods[f"{name} x detector"] = p_animal * crops["conf"]
 
+    targets = sorted({target, 0.95, 0.90}, reverse=True)
     rows, by_group = [], {}
     for name, score in methods.items():
-        ev = events.assign(score=event_scores(crops, score, events).to_numpy())
-        for t in sorted({target, 0.95, 0.90}, reverse=True):
-            rows.append({"target": t, "method": name, **evaluate(ev, t)})
-        test = ev[ev["split"] == "test"]
-        at_target = next(r for r in rows if r["method"] == name and r["target"] == target)
-        by_group[name] = recall_by_group(test, at_target["threshold"]).set_index("group")["recall"]
-    table = pd.DataFrame(rows).sort_values(["target", "method"], ascending=[False, True], kind="stable")
+        for agg, k in AGGREGATIONS.items():
+            ev = events.assign(score=event_scores(crops, score, events, k).to_numpy())
+            for t in targets:
+                rows.append({"target": t, "method": name, "events_by": agg, **evaluate(ev, t)})
+            if " x " not in name:
+                test = ev[ev["split"] == "test"]
+                t98 = rows[-len(targets)]["threshold"]
+                by_group[f"{name}, {agg}"] = recall_by_group(test, t98).set_index("group")["recall"]
+    table = pd.DataFrame(rows)
     groups_recall = pd.DataFrame(by_group)
+    cell = table.assign(
+        cell=[f"{r.empty_removed:.1%} ({r.test_recall:.1%})" for r in table.itertuples()],
+        method=table["method"] + ", " + table["events_by"],
+    )
+    summary = cell.pivot(index="method", columns="target", values="cell")[targets]
+    summary = summary.reindex(dict.fromkeys(cell["method"]))
+    summary.columns = [f"{t:.0%} target" for t in targets]
+    summary.index.name = "method, events scored by"
 
     # Per-class F1 on test crops the classifier was meant to handle, over classes every model can name.
     common = sorted(set.intersection(*covers.values()))
@@ -121,11 +151,11 @@ def main() -> int:
     f1 = {}
     for name, df in models.items():
         sub = df.loc[test_ok.index, [f"p_{g}" for g in common]]
-        pred = sub.to_numpy().argmax(1) if name != "ours" else test_ok["pred"].map(idx).fillna(len(common))
-        if name != "ours":
-            # A baseline's top choice may be a class we do not use: count that as "other".
-            other = df.loc[test_ok.index].filter(regex="^p_").drop(columns=sub.columns).max(1).to_numpy()
-            pred = np.where(other > sub.max(1).to_numpy(), len(common), pred)
+        pred = sub.to_numpy().argmax(1)
+        # The top choice may be a class not every model has: count that as "other".
+        rest = df.loc[test_ok.index].filter(regex="^p_").drop(columns=sub.columns)
+        if not rest.empty:
+            pred = np.where(rest.max(1).to_numpy() > sub.max(1).to_numpy(), len(common), pred)
         rep = per_class_report(test_ok["label"].map(idx), np.asarray(pred, dtype=int), names)
         f1[name] = rep.set_index("class")["f1"].drop(["(other)", "macro avg"])
     f1 = pd.DataFrame(f1)
@@ -142,13 +172,10 @@ def main() -> int:
         f"Test: {len(n_test):,} events ({n_animal:,} animal, {n_empty:,} empty) from {n_cams} cameras not used in training.",
         "Each threshold is the highest that keeps the target share of animal events on val, applied unchanged to test.",
         "",
-        "| Val target | Method | Threshold | Test recall | Empty events removed | Review workload removed | Animals missed |",
-        "|---|---|---|---|---|---|---|",
-        *(
-            f"| {r.target:.0%} | {r.method} | {r.threshold:.3f} | {r.test_recall:.1%} | {r.empty_removed:.1%} | "
-            f"{r.review_reduction:.1%} | {r.animals_missed} |"
-            for r in table.itertuples()
-        ),
+        "Cells: share of empty test events removed (test recall of animal events in brackets).",
+        "Thresholds, workload and missed counts are in event_eval.csv.",
+        "",
+        markdown(summary, str),
         "",
         f"## Test recall by species group at the {target:.0%} threshold",
         "",

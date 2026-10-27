@@ -54,3 +54,15 @@ def event_table(images: pd.DataFrame, score_col: str = "score") -> pd.DataFrame:
         location=("location", "first"),
     )
     return agg.reset_index()
+
+
+def kth_box_score(scores: pd.Series, keys: pd.Series, k: int = 1) -> pd.Series:
+    """Per event (``keys``), the k-th highest box score; the best score if the event has fewer than k boxes.
+
+    k=1 is the usual max rule. k=2 asks for a second box that also looks like an animal,
+    so a single leaf cannot keep an empty event alive, while one-box events still count.
+    """
+    ranked = scores.groupby(keys).rank(method="first", ascending=False)
+    kth = scores[ranked == k].groupby(keys[ranked == k]).first()
+    best = scores.groupby(keys).max()
+    return kth.reindex(best.index).fillna(best)

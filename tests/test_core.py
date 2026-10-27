@@ -153,3 +153,12 @@ def test_threshold_for_recall_keeps_target_share():
     assert threshold_for_recall(scores, 0.9) == 0.1  # 9 of 10 kept
     assert threshold_for_recall(scores, 0.95) == 0.05  # needs all 10
     assert threshold_for_recall(scores, 0.5) == 0.5
+
+
+def test_kth_box_score_falls_back_to_best():
+    from ghats.events import kth_box_score
+
+    scores = pd.Series([0.9, 0.2, 0.5, 0.7])
+    keys = pd.Series(["a", "a", "a", "b"])
+    assert kth_box_score(scores, keys, 1).to_dict() == {"a": 0.9, "b": 0.7}
+    assert kth_box_score(scores, keys, 2).to_dict() == {"a": 0.5, "b": 0.7}
