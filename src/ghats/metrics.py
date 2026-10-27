@@ -76,3 +76,16 @@ def recall_by_group(units: pd.DataFrame, threshold: float) -> pd.DataFrame:
 
 def _div(a: float, b: float) -> float:
     return float(a) / float(b) if b else float("nan")
+
+
+def threshold_for_recall(animal_scores: Iterable[float], target_recall: float) -> float:
+    """Highest threshold that keeps at least ``target_recall`` of these animal units (score >= threshold).
+
+    Used to pick the operating point on validation events, so it can then be
+    applied unchanged to the test events.
+    """
+    s = np.sort(np.asarray(list(animal_scores), dtype=float))[::-1]
+    if s.size == 0:
+        raise ValueError("no animal scores")
+    k = max(1, int(np.ceil(target_recall * s.size - 1e-9)))
+    return float(s[k - 1])

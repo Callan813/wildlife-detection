@@ -144,3 +144,12 @@ class TestMetrics:
         out = recall_by_group(units, 0.5)
         assert list(out.group) == ["rodent", "sambar"]
         assert list(out.recall) == [0.5, 1.0]
+
+
+def test_threshold_for_recall_keeps_target_share():
+    from ghats.metrics import threshold_for_recall
+
+    scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05]
+    assert threshold_for_recall(scores, 0.9) == 0.1  # 9 of 10 kept
+    assert threshold_for_recall(scores, 0.95) == 0.05  # needs all 10
+    assert threshold_for_recall(scores, 0.5) == 0.5
