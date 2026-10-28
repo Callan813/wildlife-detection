@@ -16,7 +16,7 @@ what needs a human decision.
 |---|---|---|
 | 1 | Animal detection and empty-frame filtering (MegaDetector V6) | **Done** (results below) |
 | 2 | Species classification for Ghats groups, location-split evaluation, SpeciesNet baseline | **Done** (results below) |
-| 3 | Leopard re-identification (metric learning + travel-feasibility prior) | In progress (baseline below) |
+| 3 | Leopard re-identification (metric learning + travel-feasibility prior) | **Done**, except the travel prior (no location data) |
 | 4 | Natural-language search over detections (BioCLIP/CLIP + vector DB) | Planned |
 | 5 | Reviewer dashboard with an active-learning loop | Planned |
 | 6 | Edge deployment: ONNX/INT8 on Raspberry Pi 5 or Jetson, cascade design, benchmarks | Planned |
@@ -345,16 +345,53 @@ more epochs. Details in [`reid_finetune.md`](reports/phase3/reid_finetune.md).
 In practice that makes this a ranking tool, not an automatic identifier: show a reviewer
 the top 5 or 10 candidates and let them confirm, which is the Phase 5 dashboard.
 
+### Recognising new leopards (open set)
+
+```bash
+python scripts/15_open_set.py        # "new individual" threshold, simulated on unseen leopards
+```
+
+Plain retrieval always returns the closest leopard, even for an animal that's not in the
+catalogue. Real surveys meet new leopards all the time, so the system needs to be able to
+answer "new": if the best match is less similar than a threshold, call it new.
+
+To test that, I hide a random half of the test leopards from the gallery, so their photos
+should come back "new", and repeat it over 20 random draws. The threshold is picked on val
+leopards and applied unchanged to test.
+
+![open-set trade-off](reports/phase3/open_set.png)
+
+| Test, 107 unseen leopards | Known leopards identified | New leopards flagged |
+|---|---|---|
+| ArcFace, no "new" option | 46.6% | 0% |
+| ArcFace, strict threshold (keep 90% of identifications on val) | 44.8% | 24.2% |
+| ArcFace, best-balance threshold | 29.3% | 94.5% |
+| SpeciesNet untrained, best-balance threshold | 13.0% | 94.8% |
+
+The fine-tuned model is better along the whole curve: AUROC 0.778 for telling known from
+new leopards by similarity, against 0.700 for the untrained baseline. The threshold is the
+weak point. The strict rule was tuned on val to keep 90% of identifications. On test it
+kept 96% and flagged only 24% of new leopards, while the test curve shows about 55% was
+possible at a similar cost. Similarity levels shift between groups of leopards, so a
+threshold tuned on one population doesn't transfer exactly. A deployment in the Ghats
+would need to recalibrate on its own labelled photos, and in a reviewer-in-the-loop setup
+that calibration comes for free as reviewers confirm or reject matches.
+
+**Not done: the travel-feasibility prior.** The plan was to rule out matches that would
+need a leopard to cross a reserve faster than leopards travel, using camera locations and
+times. Leopard ID 2022 has neither (no timestamps, GPS or EXIF), so this needs a dataset
+with camera metadata, or Ghats data from the outreach requests.
+
 ## Repository layout
 
 ```
 configs/phase1.yaml        dataset, sampling, detector, evaluation settings
 configs/phase2.yaml        bigger sample for classification, crop and split settings
 configs/phase3.yaml        leopard dataset, crops, split by individual, re-ID models
-src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid
+src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid, reid_model
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
-scripts/12..14             leopard crops -> re-ID baseline -> ArcFace fine-tune (Phase 3)
+scripts/12..15             leopard crops -> re-ID baseline -> ArcFace fine-tune -> open set (Phase 3)
 tests/                     unit tests + synthetic end-to-end pipeline test
 reports/phase1, phase2/    generated results (committed)
 ```

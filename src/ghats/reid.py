@@ -121,3 +121,59 @@ def retrieval_metrics(
 
 def l2_normalise(x: np.ndarray) -> np.ndarray:
     return x / np.clip(np.linalg.norm(x, axis=1, keepdims=True), 1e-12, None)
+
+
+def open_set_queries(
+    emb: np.ndarray,
+    ids: Sequence[str],
+    encounters: Sequence[str],
+    views: Sequence[str],
+    hidden: set[str],
+) -> pd.DataFrame:
+    """One row per query when the leopards in ``hidden`` are missing from the gallery.
+
+    The gallery is every crop of a leopard not in ``hidden``; as in retrieval_metrics, a
+    query never sees its own encounter and only same-flank crops count. Columns:
+      id         the query's leopard
+      is_new     True if the gallery holds no valid match (hidden leopard, or a leopard
+                 seen in only one encounter): the right answer is "new individual"
+      best_sim   similarity of the closest gallery crop
+      top1_ok    the closest gallery crop is the same leopard
+    A query is answered "new" when best_sim falls below a threshold (see open_set_rates).
+    """
+    ids, enc, v = np.asarray(ids), np.asarray(encounters), np.asarray(views)
+    in_gallery = ~np.isin(ids, list(hidden))
+    sim = emb @ emb.T
+    rows = []
+    for q in range(len(ids)):
+        keep = in_gallery & (enc != enc[q]) & (v == v[q])
+        keep[q] = False
+        if not keep.any():
+            continue
+        cand = np.flatnonzero(keep)
+        top = cand[np.argmax(sim[q, cand])]
+        rows.append(
+            {
+                "id": ids[q],
+                "is_new": not (ids[cand] == ids[q]).any(),
+                "best_sim": float(sim[q, top]),
+                "top1_ok": bool(ids[top] == ids[q]),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def open_set_rates(queries: pd.DataFrame, threshold: float) -> dict[str, float]:
+    """At one threshold, averaged per leopard (then over leopards):
+
+    known_identified  known-leopard queries answered with the right leopard
+                      (closest match correct and similar enough to be accepted)
+    new_flagged       new-leopard queries answered "new" (best match below threshold)
+    balanced          the mean of the two
+    """
+    accept = queries["best_sim"] >= threshold
+    known = queries[~queries["is_new"]]
+    new = queries[queries["is_new"]]
+    k = (known["top1_ok"] & accept[known.index]).groupby(known["id"]).mean().mean()
+    n = (~accept[new.index]).groupby(new["id"]).mean().mean()
+    return {"known_identified": float(k), "new_flagged": float(n), "balanced": float((k + n) / 2)}
