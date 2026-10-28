@@ -26,11 +26,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ghats.baselines import TightCrops, speciesnet_preprocess
+from ghats.baselines import TightCrops, speciesnet_backbone, speciesnet_preprocess
 from ghats.classify import class_weights, per_class_report
 from ghats.config import load_config
-
-POOL_NODE = "avg_pool_mean_squeeze"  # last node before SpeciesNet's dense layer
 
 
 def extract(crops: pd.DataFrame, weights: Path, batch_size: int, workers: int) -> np.ndarray:
@@ -38,11 +36,7 @@ def extract(crops: pd.DataFrame, weights: Path, batch_size: int, workers: int) -
     from torch.utils.data import DataLoader
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = torch.load(weights, map_location=device, weights_only=False).eval()
-    node = next(n for n in model.graph.nodes if n.op == "call_module" and POOL_NODE in n.name)
-    pool = model.get_submodule(node.target)
-    feats: list[np.ndarray] = []
-    pool.register_forward_hook(lambda _m, _i, out: feats.append(out.float().cpu().numpy()))
+    model, feats = speciesnet_backbone(weights, device)
     loader = DataLoader(
         TightCrops(crops["local_path"].tolist(), [ast.literal_eval(s) for s in crops["bbox"]], speciesnet_preprocess),
         batch_size=batch_size,

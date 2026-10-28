@@ -1,0 +1,34 @@
+# Phase 3: individual leopard re-identification
+#
+# Data: Leopard ID 2022 (Wild Me / Botswana Predator Conservation Trust, LILA BC,
+# CDLA-Permissive). 6,795 photos, 430 named leopards, boxes with viewpoint labels.
+# African leopards, not Indian, but the same species and the same spot-pattern problem.
+
+dataset:
+  url: https://storage.googleapis.com/public-datasets-lila/wild-me/leopard.coco.tar.gz
+  root: data/leopard/leopard.coco
+  annotations: annotations/instances_train2022.json   # the whole set is in "train"
+  images: images/train2022
+
+crops:
+  out: data/leopard/crops
+  # Spots are only comparable on the same flank; front/back/down views are kept out.
+  viewpoints: [left, right]
+  pad: 0.05            # context around the box, share of box size per side
+  max_side: 518        # px, longest side of the saved crop (DINOv2's native size)
+  jpeg_quality: 92
+
+split:
+  # Whole individuals go to one split, so test leopards are never seen in training.
+  val_frac: 0.15
+  test_frac: 0.30
+  seed: 42
+
+reid:
+  # Image ids follow capture order but there are no timestamps, so an encounter is
+  # a run of consecutive images of the same leopard (a proxy, see the README).
+  ks: [1, 5, 10]
+  models:
+    dinov2_b: {kind: timm, name: vit_base_patch14_dinov2.lvd142m, size: 518}
+    dinov2_s: {kind: timm, name: vit_small_patch14_dinov2.lvd142m, size: 518}
+    speciesnet: {kind: speciesnet}

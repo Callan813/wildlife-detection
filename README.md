@@ -16,7 +16,7 @@ what needs a human decision.
 |---|---|---|
 | 1 | Animal detection and empty-frame filtering (MegaDetector V6) | **Done** (results below) |
 | 2 | Species classification for Ghats groups, location-split evaluation, SpeciesNet baseline | **Done** (results below) |
-| 3 | Leopard re-identification (metric learning + travel-feasibility prior) | Planned |
+| 3 | Leopard re-identification (metric learning + travel-feasibility prior) | In progress (baseline below) |
 | 4 | Natural-language search over detections (BioCLIP/CLIP + vector DB) | Planned |
 | 5 | Reviewer dashboard with an active-learning loop | Planned |
 | 6 | Edge deployment: ONNX/INT8 on Raspberry Pi 5 or Jetson, cascade design, benchmarks | Planned |
@@ -265,14 +265,65 @@ temperature scaling (better calibrated probabilities, same ranking, so the same
 filtering), and turning off label smoothing (slightly higher F1, filtering within noise:
 150 empty test events give about ±6 points).
 
+## Phase 3: leopard re-identification
+
+**Question:** given a photo of a leopard, can the system find other photos of the same
+individual from its spot pattern? That is how survey teams count leopards and track
+them across cameras.
+
+**Data:** [Leopard ID 2022](https://lila.science/datasets/leopard-id-2022/) (Wild Me and
+Botswana Predator Conservation Trust, via LILA BC): 6,795 photos of 430 named African
+leopards, with boxes and a viewpoint label per animal. They're not Indian leopards, but
+it's the same species and the same spot-matching problem. I keep only left and right flank
+views (4,502 crops), because front and back views show different spots.
+
+```bash
+python scripts/12_leopard_crops.py   # crops + split by individual (needs the 8 GB download, see configs/phase3.yaml)
+python scripts/13_reid_baseline.py   # off-the-shelf embeddings, retrieval metrics
+```
+
+**How it's evaluated** ([`src/ghats/reid.py`](src/ghats/reid.py)):
+
+- **Split by individual.** Test leopards (107 of them, 1,361 crops) are never used for
+  training or tuning. Same idea as splitting by camera in Phase 2.
+- **No same-encounter matches.** Photos from one sighting are near-duplicates, so matching
+  them says nothing about recognising the leopard weeks later; they're removed from the
+  ranking. The dataset has no timestamps, so an encounter is a run of consecutive image ids
+  showing the same leopard. That's a proxy, so I also report how many correct matches come
+  from images within 10 ids of the query (16% here).
+- **Same flank only.** A left-side photo can only be matched by another left-side photo.
+- **Averaged per leopard.** A few leopards were photographed 100+ times. Averaged per query,
+  they dominate: SpeciesNet's top-1 is 62.5% per query but 36.7% per leopard. Like macro F1
+  in Phase 2, the per-leopard number is the headline.
+
+### Baseline: off-the-shelf features, no training
+
+Every crop is embedded, then each test crop is a query against all the other test crops.
+
+| Model | Top-1 | Top-5 | mAP | Val top-1 |
+|---|---|---|---|---|
+| DINOv2 ViT-B/14 (general-purpose) | 26.7% | 37.3% | 22.2% | 30.0% |
+| DINOv2 ViT-S/14 | 29.6% | 38.4% | 22.7% | 28.9% |
+| SpeciesNet backbone (camera-trap species classifier) | 36.7% | 47.0% | 25.9% | 27.9% |
+
+None of these models was trained to tell individuals apart, and it shows: the right leopard
+comes first about a third of the time. SpeciesNet leads on test but not on val, so with ~100
+leopards per split there is no clear winner yet. Full numbers in
+[`reid_baseline.md`](reports/phase3/reid_baseline.md).
+
+Next: fine-tune on the 209 training leopards with a metric-learning loss (ArcFace), so the
+embedding learns spot patterns instead of species, pose and background.
+
 ## Repository layout
 
 ```
 configs/phase1.yaml        dataset, sampling, detector, evaluation settings
 configs/phase2.yaml        bigger sample for classification, crop and split settings
-src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper
+configs/phase3.yaml        leopard dataset, crops, split by individual, re-ID models
+src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
+scripts/12..13             leopard crops -> re-ID baseline (Phase 3)
 tests/                     unit tests + synthetic end-to-end pipeline test
 reports/phase1, phase2/    generated results (committed)
 ```
@@ -283,3 +334,5 @@ reports/phase1, phase2/    generated results (committed)
   *Northern and Central Annamites Camera Traps 2.0*, IUCN SSC Asian Wild Cattle
   Specialist Group's Saola Working Group.
 - MegaDetector V6 via [PyTorch-Wildlife](https://github.com/microsoft/CameraTraps).
+- Leopard ID 2022, CDLA-Permissive-1.0, Wild Me and Botswana Predator Conservation Trust, via LILA BC.
+- DINOv2 (Meta) via timm; SpeciesNet (Google) weights from Addax Data Science.

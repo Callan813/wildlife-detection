@@ -1,0 +1,123 @@
+"""Evaluation helpers for individual re-identification (Phase 3).
+
+Re-ID here is retrieval: embed every leopard crop, and for each query crop rank
+all other crops by similarity. A good model puts a photo of the same leopard at
+the top. Two things make the naive number too optimistic:
+
+* Encounters. Photos from one sighting are near-duplicates (same pose, light,
+  background), so matching them is easy and says little about recognising the
+  animal weeks later. Gallery crops from the query's own encounter are removed.
+* Viewpoint. The left and right flanks carry different spot patterns, so a left
+  view can only be matched by another left view. Queries with no possible match
+  (a same-leopard, same-viewpoint crop from another encounter) are skipped.
+
+Individuals are split into train / val / test as a whole, so test leopards are
+never seen during training.
+"""
+
+from __future__ import annotations
+
+import random
+from collections.abc import Sequence
+
+import numpy as np
+import pandas as pd
+
+
+def split_individuals(
+    names: pd.Series, val_frac: float = 0.15, test_frac: float = 0.3, seed: int = 42
+) -> dict[str, str]:
+    """Assign every individual to train, val or test, aiming for the given share of crops."""
+    counts = names.value_counts()
+    order = list(counts.index)
+    random.Random(seed).shuffle(order)
+    total = counts.sum()
+    out, taken = {}, {"test": 0, "val": 0}
+    for name in order:
+        if taken["test"] < test_frac * total:
+            split = "test"
+        elif taken["val"] < val_frac * total:
+            split = "val"
+        else:
+            split = "train"
+        out[name] = split
+        if split in taken:
+            taken[split] += counts[name]
+    return out
+
+
+def assign_encounters(image_ids: pd.Series, names: pd.Series) -> pd.Series:
+    """Encounter id per crop: a run of consecutive images (in id order) showing the same leopard.
+
+    For data with no timestamps but ids in capture order. An image with two leopards
+    belongs to a run for each. Runs can over-split (another leopard photographed
+    mid-sighting), which leaves near-duplicates in the gallery and flatters the
+    score, so check how often top-1 matches come from nearby images.
+    """
+    df = pd.DataFrame({"image_id": image_ids, "name": names})
+    order = df.sort_values(["image_id", "name"])
+    per_image = order.groupby("image_id")["name"].apply(set)
+    ids = per_image.index.to_list()
+    run_of: dict[tuple[int, str], int] = {}
+    runs = 0
+    prev: set[str] = set()
+    for i, img in enumerate(ids):
+        for name in sorted(per_image[img]):
+            if name in prev and i > 0:
+                run_of[(img, name)] = run_of[(ids[i - 1], name)]
+            else:
+                runs += 1
+                run_of[(img, name)] = runs
+        prev = per_image[img]
+    return pd.Series([f"enc{run_of[(i, n)]}" for i, n in zip(image_ids, names)], index=image_ids.index)
+
+
+def retrieval_metrics(
+    emb: np.ndarray,
+    ids: Sequence[str],
+    encounters: Sequence[str],
+    views: Sequence[str] | None = None,
+    ks: Sequence[int] = (1, 5),
+) -> dict[str, float]:
+    """Top-k accuracy and mAP over all queries with at least one valid match.
+
+    ``emb`` rows are L2-normalised embeddings. A gallery crop is valid for a query if
+    it is from another encounter (and, when ``views`` is given, the same viewpoint).
+    Same-encounter crops are removed from the ranking entirely.
+
+    ``top{k}`` averages over queries, so a leopard photographed 150 times counts 150
+    times; ``top{k}_per_id`` averages each individual's hit rate first, so every
+    individual counts the same (like macro F1).
+    """
+    ids, enc = np.asarray(ids), np.asarray(encounters)
+    v = np.asarray(views) if views is not None else np.zeros(len(ids), dtype=object)
+    sim = emb @ emb.T
+    hits = {k: [] for k in ks}
+    aps, who = [], []
+    for q in range(len(ids)):
+        keep = (enc != enc[q]) & (v == v[q])
+        keep[q] = False
+        if not keep.any():
+            continue
+        same = ids[keep] == ids[q]
+        if not same.any():
+            continue
+        order = np.argsort(-sim[q, keep], kind="stable")
+        rel = same[order]
+        first = int(np.argmax(rel))
+        for k in ks:
+            hits[k].append(first < k)
+        ranks = np.flatnonzero(rel) + 1
+        aps.append(float(np.mean(np.arange(1, len(ranks) + 1) / ranks)))
+        who.append(ids[q])
+    out = {f"top{k}": float(np.mean(h)) if h else float("nan") for k, h in hits.items()}
+    for k, h in hits.items():
+        per_id = pd.Series(h, index=who, dtype=float).groupby(level=0).mean()
+        out[f"top{k}_per_id"] = float(per_id.mean()) if h else float("nan")
+    out["mAP"] = float(np.mean(aps)) if aps else float("nan")
+    out["queries"] = len(aps)
+    return out
+
+
+def l2_normalise(x: np.ndarray) -> np.ndarray:
+    return x / np.clip(np.linalg.norm(x, axis=1, keepdims=True), 1e-12, None)

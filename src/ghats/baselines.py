@@ -77,3 +77,20 @@ def speciesnet_preprocess(crop: Image.Image):
     x = TF.resize(x, [SPECIESNET_SIZE, SPECIESNET_SIZE], antialias=False)
     x = TF.convert_image_dtype(x, torch.uint8)
     return x.permute(1, 2, 0).float() / 255.0
+
+
+SPECIESNET_POOL_NODE = "avg_pool_mean_squeeze"  # last node before SpeciesNet's dense layer
+
+
+def speciesnet_backbone(weights, device: str):
+    """SpeciesNet with a hook on its pooled 1,280-d features.
+
+    Returns (model, feats): every forward pass appends that batch's features to feats.
+    """
+    import torch
+
+    model = torch.load(weights, map_location=device, weights_only=False).eval()
+    node = next(n for n in model.graph.nodes if n.op == "call_module" and SPECIESNET_POOL_NODE in n.name)
+    feats: list[np.ndarray] = []
+    model.get_submodule(node.target).register_forward_hook(lambda _m, _i, out: feats.append(out.float().cpu().numpy()))
+    return model, feats
