@@ -25,42 +25,8 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from ghats.baselines import OTHER, group_probs, speciesnet_group
+from ghats.baselines import OTHER, TightCrops, group_probs, speciesnet_group, speciesnet_preprocess
 from ghats.config import load_config
-
-SPECIESNET_SIZE = 480
-
-
-class TightCrops:
-    """Map-style dataset: the detector box cut from the original frame, preprocessed for one model."""
-
-    def __init__(self, paths: list[str], bboxes: list[list[float]], preprocess):
-        self.paths = paths
-        self.bboxes = bboxes
-        self.preprocess = preprocess
-
-    def __len__(self) -> int:
-        return len(self.paths)
-
-    def __getitem__(self, i: int):
-        with Image.open(self.paths[i]) as im:
-            im = im.convert("RGB")
-            x1, y1, x2, y2 = self.bboxes[i]
-            box = (int(x1 * im.width), int(y1 * im.height), int(x2 * im.width), int(y2 * im.height))
-            if box[2] - box[0] < 2 or box[3] - box[1] < 2:
-                box = (0, 0, im.width, im.height)  # degenerate box: fall back to the frame
-            return self.preprocess(im.crop(box))
-
-
-def speciesnet_preprocess(crop: Image.Image):
-    """SpeciesNet's own pipeline: resize to 480 without antialiasing, uint8 round trip, NHWC in [0, 1]."""
-    import torch
-    import torchvision.transforms.functional as TF
-
-    x = TF.convert_image_dtype(TF.pil_to_tensor(crop), torch.float32)
-    x = TF.resize(x, [SPECIESNET_SIZE, SPECIESNET_SIZE], antialias=False)
-    x = TF.convert_image_dtype(x, torch.uint8)
-    return x.permute(1, 2, 0).float() / 255.0
 
 
 class IndPreprocess:

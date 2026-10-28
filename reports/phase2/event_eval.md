@@ -16,6 +16,10 @@ Thresholds, workload and missed counts are in event_eval.csv.
 | ours, 2nd box | out of reach | out of reach | 56.7% (89.9%) |
 | ours x detector, best box | out of reach | out of reach | 60.0% (92.1%) |
 | ours x detector, 2nd box | out of reach | out of reach | 55.3% (89.4%) |
+| probe, best box | out of reach | out of reach | 74.0% (90.9%) |
+| probe, 2nd box | out of reach | out of reach | 53.3% (91.8%) |
+| probe x detector, best box | out of reach | out of reach | 67.3% (91.6%) |
+| probe x detector, 2nd box | out of reach | out of reach | 52.0% (91.1%) |
 | speciesnet, best box | out of reach | out of reach | 76.7% (91.3%) |
 | speciesnet, 2nd box | out of reach | out of reach | 66.7% (90.1%) |
 | speciesnet x detector, best box | out of reach | out of reach | 69.3% (91.8%) |
@@ -27,39 +31,39 @@ Thresholds, workload and missed counts are in event_eval.csv.
 
 ## Test recall by species group at the 90% threshold
 
-| group | detector, best box | detector, 2nd box | ours, best box | ours, 2nd box | speciesnet, best box | speciesnet, 2nd box | ind-ads, best box | ind-ads, 2nd box |
-|---|---|---|---|---|---|---|---|---|
-| barking_deer | 100% | 94% | 94% | 94% | 97% | 97% | 97% | 100% |
-| bear | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
-| civet | 95% | 87% | 95% | 95% | 95% | 92% | 95% | 95% |
-| junglefowl | 96% | 92% | 96% | 96% | 96% | 96% | 96% | 96% |
-| macaque | 90% | 90% | 90% | 90% | 90% | 90% | 90% | 90% |
-| marten | 85% | 85% | 74% | 78% | 81% | 81% | 78% | 78% |
-| mongoose | 96% | 96% | 93% | 96% | 96% | 96% | 100% | 89% |
-| mouse_deer | 98% | 100% | 98% | 100% | 100% | 95% | 98% | 100% |
-| pangolin | 90% | 90% | 90% | 70% | 90% | 80% | 90% | 90% |
-| porcupine | 96% | 93% | 93% | 89% | 96% | 89% | 93% | 96% |
-| rodent | 82% | 79% | 85% | 82% | 85% | 82% | 82% | 85% |
-| sambar | 100% | 97% | 100% | 100% | 100% | 100% | 100% | 100% |
-| small_cat | 77% | 69% | 77% | 77% | 77% | 77% | 77% | 77% |
-| squirrel | 77% | 69% | 62% | 65% | 65% | 77% | 69% | 85% |
-| wild_boar | 92% | 94% | 92% | 92% | 89% | 86% | 89% | 89% |
+| group | detector, best box | detector, 2nd box | ours, best box | ours, 2nd box | probe, best box | probe, 2nd box | speciesnet, best box | speciesnet, 2nd box | ind-ads, best box | ind-ads, 2nd box |
+|---|---|---|---|---|---|---|---|---|---|---|
+| barking_deer | 100% | 94% | 94% | 94% | 97% | 97% | 97% | 97% | 97% | 100% |
+| bear | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
+| civet | 95% | 87% | 95% | 95% | 95% | 95% | 95% | 92% | 95% | 95% |
+| junglefowl | 96% | 92% | 96% | 96% | 96% | 96% | 96% | 96% | 96% | 96% |
+| macaque | 90% | 90% | 90% | 90% | 90% | 90% | 90% | 90% | 90% | 90% |
+| marten | 85% | 85% | 74% | 78% | 74% | 81% | 81% | 81% | 78% | 78% |
+| mongoose | 96% | 96% | 93% | 96% | 96% | 96% | 96% | 96% | 100% | 89% |
+| mouse_deer | 98% | 100% | 98% | 100% | 98% | 100% | 100% | 95% | 98% | 100% |
+| pangolin | 90% | 90% | 90% | 70% | 90% | 90% | 90% | 80% | 90% | 90% |
+| porcupine | 96% | 93% | 93% | 89% | 96% | 96% | 96% | 89% | 93% | 96% |
+| rodent | 82% | 79% | 85% | 82% | 85% | 82% | 85% | 82% | 82% | 85% |
+| sambar | 100% | 97% | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
+| small_cat | 77% | 69% | 77% | 77% | 77% | 77% | 77% | 77% | 77% | 77% |
+| squirrel | 77% | 69% | 62% | 65% | 65% | 77% | 65% | 77% | 69% | 85% |
+| wild_boar | 92% | 94% | 92% | 92% | 92% | 89% | 89% | 86% | 89% | 89% |
 
 ## Crop-level F1 on test, classes every model can name (2,139 crops)
 
-| class | ours | speciesnet | ind-ads |
-|---|---|---|---|
-| background | 0.86 | 0.91 | 0.89 |
-| barking_deer | 0.82 | 0.95 | 0.87 |
-| bear | 0.90 | 0.88 | 0.55 |
-| civet | 0.78 | 0.86 | 0.55 |
-| junglefowl | 0.94 | 0.98 | 0.92 |
-| macaque | 0.88 | 0.96 | 0.36 |
-| mongoose | 0.51 | 0.94 | 0.41 |
-| pangolin | 0.84 | 0.86 | 0.51 |
-| porcupine | 0.82 | 0.89 | 0.65 |
-| sambar | 0.77 | 0.99 | 0.87 |
-| small_cat | 0.70 | 0.63 | 0.25 |
-| wild_boar | 0.91 | 0.98 | 0.84 |
+| class | ours | probe | speciesnet | ind-ads |
+|---|---|---|---|---|
+| background | 0.86 | 0.92 | 0.91 | 0.89 |
+| barking_deer | 0.82 | 0.93 | 0.95 | 0.87 |
+| bear | 0.90 | 0.95 | 0.88 | 0.55 |
+| civet | 0.78 | 0.87 | 0.86 | 0.55 |
+| junglefowl | 0.94 | 0.98 | 0.98 | 0.92 |
+| macaque | 0.88 | 0.94 | 0.96 | 0.36 |
+| mongoose | 0.51 | 0.93 | 0.94 | 0.41 |
+| pangolin | 0.84 | 0.90 | 0.86 | 0.51 |
+| porcupine | 0.82 | 0.93 | 0.89 | 0.65 |
+| sambar | 0.77 | 0.94 | 0.99 | 0.87 |
+| small_cat | 0.70 | 0.77 | 0.63 | 0.25 |
+| wild_boar | 0.91 | 0.96 | 0.98 | 0.84 |
 
-Macro F1: ours 0.812, speciesnet 0.903, ind-ads 0.641
+Macro F1: ours 0.812, probe 0.920, speciesnet 0.903, ind-ads 0.641

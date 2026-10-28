@@ -164,6 +164,7 @@ python scripts/06_make_crops.py          # detector boxes -> labelled crops, spl
 python scripts/07_train_classifier.py    # ConvNeXt-Tiny, ~75 s/epoch on an RTX 3050 Laptop
 python scripts/09_event_eval.py          # empty-event filtering: detector vs classifier
 python scripts/10_miss_gallery.py --threshold 0.504   # animal events the filter throws away
+python scripts/11_speciesnet_probe.py    # frozen SpeciesNet features + logistic regression head
 ```
 
 **Crops and labels.** Every animal box at 0.02 or above becomes a crop (up to 5 per frame).
@@ -227,10 +228,36 @@ ahead only on small cats (0.70 vs 0.63) and bears (0.90 vs 0.88). The Central In
 is the more honest out-of-domain test: trained on Indian forest, it is weaker than mine
 on Vietnamese and Lao cameras (0.64), especially on macaques (0.36) and small cats (0.25).
 
-What I take from it: on this data a big pretrained classifier beats a small one trained
-from scratch on 10k crops, so for the later phases I'd start from SpeciesNet. The
-important parts of the project are the evaluation (event-level, unseen cameras, thresholds
-picked on val) and finding the padding bug, not my classifier.
+### Building on SpeciesNet instead
+
+Is SpeciesNet's edge its backbone (features learned from 65M camera-trap images) or its
+head (which may have seen SWG)? `scripts/11_speciesnet_probe.py` keeps the backbone frozen,
+takes its pooled 1,280-d features for every crop, and fits a logistic regression on my
+train cameras only. This is the same recipe the Central India model uses, just trained
+on my groups and cameras. It takes ~15 minutes on the 3050, mostly feature extraction.
+
+| Model | Macro F1, all 16 classes (2,383 test crops) | Macro F1, 12 shared classes | Empty events removed at 90% recall |
+|---|---|---|---|
+| Mine (ConvNeXt-Tiny, trained end to end) | 0.776 | 0.812 | 69.3% |
+| **SpeciesNet features + my head** | **0.887** | **0.920** | 74.0% |
+| SpeciesNet off the shelf | n/a | 0.903 | 76.7% |
+
+The probe is the best species classifier here, ahead even of SpeciesNet's own head on
+the shared classes. The biggest gains over my ConvNeXt are on the classes I had the least
+data for: mongoose 0.49 → 0.91, squirrel 0.46 → 0.65, sambar 0.77 → 0.94. For filtering
+empty events it is level with SpeciesNet (74.0% vs 76.7% is within the ±6 point noise of
+150 empty test events). Details in
+[`classifier_summary_probe.md`](reports/phase2/classifier_summary_probe.md).
+
+The SWG caveat still applies: if SpeciesNet's backbone was trained on these cameras, the
+probe benefits too. Only data from cameras SpeciesNet has never seen, ideally from the
+Ghats, would settle that.
+
+What I take from it: with ~10k labelled crops, a strong pretrained camera-trap backbone
+plus a small head beats training a model end to end, and costs a fraction of the compute.
+That's the setup I'd carry forward. The parts of the project I'd call my own are the
+evaluation (event-level, unseen cameras, thresholds picked on val) and finding the
+padding bug.
 
 **Things I tried that didn't help** (on the earlier run, before the padding fix):
 requiring a second convincing box per event (22% of animal events have only one),
@@ -245,7 +272,7 @@ configs/phase1.yaml        dataset, sampling, detector, evaluation settings
 configs/phase2.yaml        bigger sample for classification, crop and split settings
 src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
-scripts/06..10             crops -> classifier -> baselines -> event eval -> miss gallery (Phase 2)
+scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
 tests/                     unit tests + synthetic end-to-end pipeline test
 reports/phase1, phase2/    generated results (committed)
 ```

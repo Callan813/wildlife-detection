@@ -84,7 +84,7 @@ def main() -> int:
         nargs="+",
         default=[
             "ours=outputs/phase2/classifier/predictions.csv",
-            "ours-nols=outputs/phase2/classifier_nols/predictions.csv",
+            "probe=outputs/phase2/speciesnet_probe/predictions.csv",
         ],
         help="name=path of our classifiers' predictions; missing files are skipped",
     )
