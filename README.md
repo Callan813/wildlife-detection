@@ -15,7 +15,7 @@ what needs a human decision.
 | Phase | What | Status |
 |---|---|---|
 | 1 | Animal detection and empty-frame filtering (MegaDetector V6) | **Done** (results below) |
-| 2 | Species classification for Ghats groups, location-split evaluation, SpeciesNet baseline | In progress |
+| 2 | Species classification for Ghats groups, location-split evaluation, SpeciesNet baseline | **Done** (results below) |
 | 3 | Leopard re-identification (metric learning + travel-feasibility prior) | Planned |
 | 4 | Natural-language search over detections (BioCLIP/CLIP + vector DB) | Planned |
 | 5 | Reviewer dashboard with an active-learning loop | Planned |
@@ -204,6 +204,33 @@ per-group recall, in [`event_eval.md`](reports/phase2/event_eval.md).
 At the 90% threshold, 83 val/test animal events are dropped. 53 of them never had a box
 (a detector miss), and 30 had boxes the classifier called background. The detector is
 the bigger bottleneck, and it is worst on small animals: rodents, squirrels and martens.
+
+### Against off-the-shelf classifiers
+
+`scripts/08_run_baselines.py` runs two existing camera-trap classifiers on the same
+val/test boxes and maps their labels onto my groups:
+[SpeciesNet](https://github.com/google/cameratrapai) v4.0.2a (Google, ~2,500 labels,
+65M+ training images) and the Addax Data Science Central India model (IND-ADS, 40 labels,
+CC-BY-NC, used for evaluation only).
+
+| Model | Macro F1, 12 shared classes (2,139 test crops) | Empty events removed at 90% recall |
+|---|---|---|
+| Mine (ConvNeXt-Tiny, ~10k crops) | 0.812 | 69.3% |
+| SpeciesNet | **0.903** | **76.7%** |
+| IND-ADS (Central India) | 0.641 | 63.3% |
+
+**SpeciesNet wins, with a caveat.** Its training data includes public camera-trap
+repositories, and I couldn't confirm whether SWG was among them. If it was, it has seen
+these exact cameras, and the comparison flatters it. Even so, the gap is largest exactly
+where my model has the least data: mongoose 0.94 vs 0.51, sambar 0.99 vs 0.77. Mine is
+ahead only on small cats (0.70 vs 0.63) and bears (0.90 vs 0.88). The Central India model
+is the more honest out-of-domain test: trained on Indian forest, it is weaker than mine
+on Vietnamese and Lao cameras (0.64), especially on macaques (0.36) and small cats (0.25).
+
+What I take from it: on this data a big pretrained classifier beats a small one trained
+from scratch on 10k crops, so for the later phases I'd start from SpeciesNet. The
+important parts of the project are the evaluation (event-level, unseen cameras, thresholds
+picked on val) and finding the padding bug, not my classifier.
 
 **Things I tried that didn't help** (on the earlier run, before the padding fix):
 requiring a second convincing box per event (22% of animal events have only one),

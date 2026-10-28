@@ -21,7 +21,7 @@ dependencies = [
 # The detector stack is heavy (torch + ultralytics); keep it optional so the
 # metrics code and tests install in seconds.
 # soundfile + librosa: PytorchWildlife 1.3.0 imports them at load but does not declare them.
-detect = ["PytorchWildlife>=1.3", "soundfile", "librosa"]
+detect = ["PytorchWildlife>=1.3", "soundfile", "librosa", "onnx2torch"]  # onnx2torch: SpeciesNet weights
 dev = ["pytest", "ruff"]
 
 [tool.setuptools.packages.find]

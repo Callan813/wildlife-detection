@@ -161,7 +161,7 @@ def main() -> int:
         # The top choice may be a class not every model has: count that as "other".
         rest = df.loc[test_ok.index].filter(regex="^p_").drop(columns=sub.columns)
         if not rest.empty:
-            pred = np.where(rest.max(1).to_numpy() > sub.max(1).to_numpy(), len(common), pred)
+            pred = np.where(rest.max(axis=1).to_numpy() > sub.max(axis=1).to_numpy(), len(common), pred)
         rep = per_class_report(test_ok["label"].map(idx), np.asarray(pred, dtype=int), names)
         f1[name] = rep.set_index("class")["f1"].drop(["(other)", "macro avg"])
     f1 = pd.DataFrame(f1)

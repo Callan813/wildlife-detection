@@ -9,9 +9,9 @@ box is cut again from the original frame without our 10% padding. Writes
 outputs/phase2/baselines/<model>/predictions.csv with the same columns as our classifier's
 predictions (p_<group> for every group, plus p_other), ready for scripts/09_event_eval.py.
 
-The weights are torch.fx GraphModules (SpeciesNet converted from ONNX with onnx2torch), which
-torch can only load with weights_only=False: loading them runs pickled code, so only use files
-from the sources named in the config.
+The weights are torch.fx GraphModules (SpeciesNet converted from ONNX with onnx2torch, which
+must be installed), which torch can only load with weights_only=False: loading them runs
+pickled code, so only use files from the sources named in the config.
 """
 
 from __future__ import annotations
