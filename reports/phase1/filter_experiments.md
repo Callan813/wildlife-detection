@@ -4,24 +4,24 @@
 
 | Rule | Target recall | Threshold | Recall | Empty events removed |
 |---|---|---|---|---|
-| Max score (baseline) | 98% | 0.06 | 98.8% | 6.2% |
-| Max score (baseline) | 95% | 0.08 | 95.2% | 30.3% |
-| Max score (baseline) | 90% | 0.10 | 90.8% | 55.2% |
-| Burst: 2 frames agree | 98% | 0.06 | 98.0% | 8.7% |
-| Burst: 2 frames agree | 95% | 0.06 | 98.0% | 8.7% |
-| Burst: 2 frames agree | 90% | 0.08 | 90.5% | 36.3% |
-| Burst: 3 frames agree | 98% | 0.05 | 99.2% | 2.8% |
-| Burst: 3 frames agree | 95% | 0.06 | 96.2% | 13.3% |
-| Burst: 3 frames agree | 90% | 0.07 | 91.5% | 25.7% |
-| Burst: same box in 2 frames | 98% | 0.01 | 85.8% (misses target) | 27.3% |
-| Burst: same box in 2 frames | 95% | 0.01 | 85.8% (misses target) | 27.3% |
-| Burst: same box in 2 frames | 90% | 0.01 | 85.8% (misses target) | 27.3% |
-| Burst: same box in 3 frames | 98% | 0.01 | 76.7% (misses target) | 33.3% |
-| Burst: same box in 3 frames | 95% | 0.01 | 76.7% (misses target) | 33.3% |
-| Burst: same box in 3 frames | 90% | 0.01 | 76.7% (misses target) | 33.3% |
-| Camera background (IoU 0.5) | 98% | 0.06 | 98.8% | 6.2% |
-| Camera background (IoU 0.5) | 95% | 0.07 | 97.2% | 16.7% |
-| Camera background (IoU 0.5) | 90% | 0.09 | 91.5% | 45.3% |
-| Camera background (IoU 0.7) | 98% | 0.06 | 98.8% | 6.2% |
-| Camera background (IoU 0.7) | 95% | 0.07 | 97.2% | 16.3% |
-| Camera background (IoU 0.7) | 90% | 0.09 | 92.2% | 44.7% |
+| Max score (baseline) | 98% | 0.01 | 96.5% (misses target) | 28.0% |
+| Max score (baseline) | 95% | 0.01 | 96.5% | 28.0% |
+| Max score (baseline) | 90% | 0.06 | 90.2% | 65.0% |
+| Burst: 2 frames agree | 98% | 0.01 | 94.0% (misses target) | 35.2% |
+| Burst: 2 frames agree | 95% | 0.01 | 94.0% (misses target) | 35.2% |
+| Burst: 2 frames agree | 90% | 0.01 | 94.0% | 35.2% |
+| Burst: 3 frames agree | 98% | 0.01 | 90.3% (misses target) | 40.2% |
+| Burst: 3 frames agree | 95% | 0.01 | 90.3% (misses target) | 40.2% |
+| Burst: 3 frames agree | 90% | 0.01 | 90.3% | 40.2% |
+| Burst: same box in 2 frames | 98% | 0.01 | 84.7% (misses target) | 37.8% |
+| Burst: same box in 2 frames | 95% | 0.01 | 84.7% (misses target) | 37.8% |
+| Burst: same box in 2 frames | 90% | 0.01 | 84.7% (misses target) | 37.8% |
+| Burst: same box in 3 frames | 98% | 0.01 | 75.5% (misses target) | 44.3% |
+| Burst: same box in 3 frames | 95% | 0.01 | 75.5% (misses target) | 44.3% |
+| Burst: same box in 3 frames | 90% | 0.01 | 75.5% (misses target) | 44.3% |
+| Camera background (IoU 0.5) | 98% | 0.01 | 95.0% (misses target) | 29.3% |
+| Camera background (IoU 0.5) | 95% | 0.01 | 95.0% | 29.3% |
+| Camera background (IoU 0.5) | 90% | 0.03 | 91.3% | 53.5% |
+| Camera background (IoU 0.7) | 98% | 0.01 | 95.5% (misses target) | 28.5% |
+| Camera background (IoU 0.7) | 95% | 0.01 | 95.5% | 28.5% |
+| Camera background (IoU 0.7) | 90% | 0.04 | 91.2% | 58.8% |

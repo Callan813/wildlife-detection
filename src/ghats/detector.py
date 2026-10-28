@@ -96,10 +96,17 @@ def load_image(image_path: str, transform: Any) -> tuple[Any, Any, tuple[int, in
         return image, rev, im.size
 
 
+def has_area(bbox: list[float]) -> bool:
+    return bbox[2] > bbox[0] and bbox[3] > bbox[1]
+
+
 def _to_detections(classes: Any, confs: Any, boxes: Any, w: int, h: int) -> list[Detection]:
     # PyTorch-Wildlife 1.3 returns pixel boxes (xyxy) in original-image
     # coordinates, sometimes slightly past the edge; normalise and clamp.
-    return [
+    # The model also fires on the letterbox padding above and below wide frames
+    # (conf up to ~0.2, in almost every image). Those boxes lie wholly outside the
+    # image, clamp to zero-height strips on the border, and are dropped.
+    dets = [
         Detection(
             category=_CLASS_NAMES.get(int(c), str(int(c))),
             conf=round(float(p), 4),
@@ -107,3 +114,4 @@ def _to_detections(classes: Any, confs: Any, boxes: Any, w: int, h: int) -> list
         )
         for c, p, box in zip(classes, confs, boxes)
     ]
+    return [d for d in dets if has_area(d.bbox)]

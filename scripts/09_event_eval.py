@@ -60,9 +60,12 @@ def markdown(df: pd.DataFrame, fmt) -> str:
 
 def evaluate(events: pd.DataFrame, target: float) -> dict:
     val, test = events[events["split"] == "val"], events[events["split"] == "test"]
-    t = threshold_for_recall(val.loc[val["gt"] == "animal", "score"], target)
+    val_animal = val.loc[val["gt"] == "animal", "score"]
+    t = threshold_for_recall(val_animal, target)
     row = threshold_sweep(test["score"], test["gt"] == "animal", [t]).iloc[0]
     return {
+        # Animal events with no box score 0; if too many, no threshold above 0 meets the target.
+        "reachable": bool((val_animal > 0).mean() >= target),
         "threshold": t,
         "test_recall": row["recall"],
         "empty_removed": row["empty_removed"],
@@ -130,12 +133,15 @@ def main() -> int:
                 rows.append({"target": t, "method": name, "events_by": agg, **evaluate(ev, t)})
             if " x " not in name:
                 test = ev[ev["split"] == "test"]
-                t98 = rows[-len(targets)]["threshold"]
-                by_group[f"{name}, {agg}"] = recall_by_group(test, t98).set_index("group")["recall"]
+                t_low = rows[-1]["threshold"]  # loosest target: the strict ones may be out of reach
+                by_group[f"{name}, {agg}"] = recall_by_group(test, t_low).set_index("group")["recall"]
     table = pd.DataFrame(rows)
     groups_recall = pd.DataFrame(by_group)
     cell = table.assign(
-        cell=[f"{r.empty_removed:.1%} ({r.test_recall:.1%})" for r in table.itertuples()],
+        cell=[
+            f"{r.empty_removed:.1%} ({r.test_recall:.1%})" if r.reachable else "out of reach"
+            for r in table.itertuples()
+        ],
         method=table["method"] + ", " + table["events_by"],
     )
     summary = cell.pivot(index="method", columns="target", values="cell")[targets]
@@ -166,18 +172,24 @@ def main() -> int:
     n_test = events[events["split"] == "test"]
     n_animal, n_empty = (n_test["gt"] == "animal").sum(), (n_test["gt"] == "empty").sum()
     n_cams = n_test["location"].nunique()
+    n_nobox = int(((n_test["gt"] == "animal") & ~n_test["seq_key"].isin(set(crops["seq_key"]))).sum())
     lines = [
         "# Phase 2: empty-event filtering with a crop classifier",
         "",
         f"Test: {len(n_test):,} events ({n_animal:,} animal, {n_empty:,} empty) from {n_cams} cameras not used in training.",
         "Each threshold is the highest that keeps the target share of animal events on val, applied unchanged to test.",
         "",
+        (
+            f"{n_nobox} of {n_animal} animal test events have no detector box at or above the crop floor, so no method can keep more "
+            f"than {1 - n_nobox / n_animal:.1%} of them. Targets above what val allows are marked out of reach."
+        ),
+        "",
         "Cells: share of empty test events removed (test recall of animal events in brackets).",
         "Thresholds, workload and missed counts are in event_eval.csv.",
         "",
         markdown(summary, str),
         "",
-        f"## Test recall by species group at the {target:.0%} threshold",
+        f"## Test recall by species group at the {targets[-1]:.0%} threshold",
         "",
         markdown(groups_recall, lambda v: f"{v:.0%}"),
         "",

@@ -5,32 +5,34 @@ Data: 5,726 frames in 1,200 trigger events (600 animal, 600 empty) from 507 came
 
 ## Operating point (target event recall 98%)
 
+The target is out of reach: even at the lowest threshold, 21 animal events have no detector box at all. The row below is the lowest threshold.
+
 | Metric | Value |
 |---|---|
-| Confidence threshold | 0.06 |
-| Animal events kept (recall) | 98.8% |
-| Precision of kept events | 51.3% |
-| Empty events removed | 6.2% |
-| Review workload removed | 3.7% |
-| Animal events missed | 7 of 600 |
+| Confidence threshold | 0.01 |
+| Animal events kept (recall) | 96.5% |
+| Precision of kept events | 57.3% |
+| Empty events removed | 28.0% |
+| Review workload removed | 15.8% |
+| Animal events missed | 21 of 600 |
 
 ## Recall by species group at that threshold (worst first)
 
 | Group | Events | Recall |
 |---|---|---|
+| pangolin | 41 | 87.8% |
+| rodent | 41 | 92.7% |
+| macaque | 42 | 92.9% |
+| small_cat | 41 | 95.1% |
+| civet | 42 | 95.2% |
 | marten | 32 | 96.9% |
-| pangolin | 41 | 97.6% |
-| small_cat | 41 | 97.6% |
-| civet | 42 | 97.6% |
+| porcupine | 41 | 97.6% |
 | squirrel | 42 | 97.6% |
 | barking_deer | 43 | 97.7% |
+| sambar | 43 | 97.7% |
 | wild_boar | 43 | 97.7% |
-| sambar | 43 | 100.0% |
 | bear | 42 | 100.0% |
-| macaque | 42 | 100.0% |
 | mongoose | 42 | 100.0% |
-| porcupine | 41 | 100.0% |
-| rodent | 41 | 100.0% |
 | junglefowl | 36 | 100.0% |
 | mouse_deer | 29 | 100.0% |
 

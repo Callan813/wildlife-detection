@@ -162,3 +162,14 @@ def test_kth_box_score_falls_back_to_best():
     keys = pd.Series(["a", "a", "a", "b"])
     assert kth_box_score(scores, keys, 1).to_dict() == {"a": 0.9, "b": 0.7}
     assert kth_box_score(scores, keys, 2).to_dict() == {"a": 0.5, "b": 0.7}
+
+
+def test_padding_boxes_are_dropped():
+    from ghats.detector import _to_detections
+
+    # 1600x900 frame: one real box, one box wholly in the letterbox padding above it.
+    boxes = [[100, 200, 400, 500], [2, -60, 1596, -5]]
+    dets = _to_detections([0, 0], [0.9, 0.12], boxes, 1600, 900)
+    assert len(dets) == 1
+    assert dets[0].conf == 0.9
+    assert dets[0].bbox == [0.0625, 0.2222, 0.25, 0.5556]

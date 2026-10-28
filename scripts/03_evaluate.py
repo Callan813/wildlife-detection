@@ -140,6 +140,16 @@ def write_summary(r: dict, path: Path, target_recall: float) -> None:
         "",
         f"## Operating point (target event recall {target_recall:.0%})",
         "",
+    ]
+    if op["recall"] < target_recall:
+        lines += [
+            (
+                f"The target is out of reach: even at the lowest threshold, {int(op['fn'])} animal events "
+                "have no detector box at all. The row below is the lowest threshold."
+            ),
+            "",
+        ]
+    lines += [
         "| Metric | Value |",
         "|---|---|",
         f"| Confidence threshold | {op['threshold']:.2f} |",
