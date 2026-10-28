@@ -32,3 +32,19 @@ reid:
     dinov2_b: {kind: timm, name: vit_base_patch14_dinov2.lvd142m, size: 518}
     dinov2_s: {kind: timm, name: vit_small_patch14_dinov2.lvd142m, size: 518}
     speciesnet: {kind: speciesnet}
+
+train:
+  # ArcFace fine-tune of DINOv2-S. A class is one leopard's flank: left and right
+  # show different spots, so they are not pulled together.
+  backbone: vit_small_patch14_dinov2.lvd142m
+  size: [224, 448]     # h, w (multiples of 14); flank crops are wide
+  embed_dim: 512
+  epochs: 20
+  batch_size: 32
+  lr_backbone: 2.0e-5
+  lr_head: 1.0e-3
+  weight_decay: 0.05
+  arcface_margin: 0.3
+  arcface_scale: 30.0
+  # No horizontal flips: a flipped left flank looks like a right flank that doesn't exist.
+  grayscale_p: 0.3     # night photos are IR grayscale

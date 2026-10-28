@@ -311,8 +311,39 @@ comes first about a third of the time. SpeciesNet leads on test but not on val, 
 leopards per split there is no clear winner yet. Full numbers in
 [`reid_baseline.md`](reports/phase3/reid_baseline.md).
 
-Next: fine-tune on the 209 training leopards with a metric-learning loss (ArcFace), so the
-embedding learns spot patterns instead of species, pose and background.
+### Fine-tuned with ArcFace
+
+```bash
+python scripts/14_train_reid.py      # DINOv2-S + ArcFace on the train leopards, ~65 s/epoch on an RTX 3050
+```
+
+ArcFace trains the embedding so photos of one leopard sit close together and other
+leopards are pushed a fixed angle away. Choices that matter here:
+
+- **A class is one leopard's flank**, not one leopard (355 flanks from 209 leopards).
+  The left and right sides have different spots, so they shouldn't be pulled together.
+- **No horizontal flips.** The usual augmentation would turn a left flank into a right
+  flank that doesn't exist. Instead: random crops, colour jitter, and random grayscale,
+  since night photos are infrared.
+- **DINOv2-S, fully fine-tuned**, input 224×448 (flank crops are wide), 20 epochs, the
+  best epoch picked on val leopards.
+
+| Test, 107 unseen leopards | Top-1 | Top-5 | Top-10 | mAP |
+|---|---|---|---|---|
+| DINOv2-S, untrained (same input size) | 28.4% | 39.7% | 44.3% | 22.8% |
+| SpeciesNet backbone, untrained (best baseline) | 36.7% | 47.0% | 50.4% | 25.9% |
+| **DINOv2-S + ArcFace** | **40.2%** | **57.1%** | **64.5%** | **35.4%** |
+
+Fine-tuning lifts every metric. The clearest gain is in the shortlist: the right leopard is
+in the top 5 for 57% of leopards, up from 40%. Top-1 beats the best baseline by only 3.5
+points, which is within the noise of ~100 test leopards (about ±5 points); top-5 and mAP
+gain 10 points each, which is not. The training loss reached almost zero by epoch 10 while
+val top-1 stayed at 35–39%, so with 2,450 training photos the model memorises the training
+leopards faster than it learns general spot matching. More leopards would help more than
+more epochs. Details in [`reid_finetune.md`](reports/phase3/reid_finetune.md).
+
+In practice that makes this a ranking tool, not an automatic identifier: show a reviewer
+the top 5 or 10 candidates and let them confirm, which is the Phase 5 dashboard.
 
 ## Repository layout
 
@@ -323,7 +354,7 @@ configs/phase3.yaml        leopard dataset, crops, split by individual, re-ID mo
 src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
-scripts/12..13             leopard crops -> re-ID baseline (Phase 3)
+scripts/12..14             leopard crops -> re-ID baseline -> ArcFace fine-tune (Phase 3)
 tests/                     unit tests + synthetic end-to-end pipeline test
 reports/phase1, phase2/    generated results (committed)
 ```
