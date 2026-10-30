@@ -48,3 +48,12 @@ train:
   arcface_scale: 30.0
   # No horizontal flips: a flipped left flank looks like a right flank that doesn't exist.
   grayscale_p: 0.3     # night photos are IR grayscale
+
+leopard102:
+  # LeopardID102 (Zimbabwe camera-trap survey, CC BY-NC-SA 4.0): full frames, no boxes,
+  # no flank labels, but times and camera positions. Crops come from MegaDetector.
+  manifest: data/leopard102/manifest.csv
+  detections: outputs/phase3/leopard102/detections.jsonl
+  out: data/leopard102/crops
+  min_conf: 0.2          # top animal box per image; below this the image is dropped
+  encounter_gap_min: 30  # same leopard, same camera, no gap longer than this

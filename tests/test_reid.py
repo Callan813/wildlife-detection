@@ -1,7 +1,30 @@
 import numpy as np
 import pandas as pd
+import pytest
 
-from ghats.reid import l2_normalise, retrieval_metrics, split_individuals
+from ghats.reid import l2_normalise, parse_spotted_filename, retrieval_metrics, split_individuals, time_encounters
+
+
+def test_parse_spotted_filename():
+    p = parse_spotted_filename("CTS2021_CAM15-C07-2505_2021-05-11_13-37-30_I_00005a")
+    assert p == {"camera": "CAM15", "time": "2021-05-11 13:37:30", "pair_side": "a"}
+    assert parse_spotted_filename("CTS2021_CAM04-20X-1005_2021-05-10_05-39-36_Cdy00048")["pair_side"] == ""
+    assert parse_spotted_filename("CTS2021_CAM02-9Z-1005_2021-04-20_07-02-00_CDY_0005")["camera"] == "CAM02"
+    with pytest.raises(ValueError):
+        parse_spotted_filename("IMG_0001")
+
+
+def test_time_encounters_split_on_gap_camera_and_leopard():
+    names = pd.Series(["A", "A", "A", "A", "B"])
+    cams = pd.Series(["CAM1", "CAM1", "CAM1", "CAM2", "CAM1"])
+    times = pd.Series(
+        ["2021-05-01 10:00", "2021-05-01 10:20", "2021-05-01 11:30", "2021-05-01 10:05", "2021-05-01 10:01"]
+    )
+    enc = time_encounters(names, cams, times, gap_minutes=30)
+    assert enc[0] == enc[1]  # 20 min apart
+    assert enc[1] != enc[2]  # 70 min gap
+    assert enc[0] != enc[3]  # other camera
+    assert enc[0] != enc[4]  # other leopard
 
 
 def test_split_keeps_individuals_whole_and_hits_shares():

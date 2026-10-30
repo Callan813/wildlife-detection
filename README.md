@@ -382,16 +382,74 @@ need a leopard to cross a reserve faster than leopards travel, using camera loca
 times. Leopard ID 2022 has neither (no timestamps, GPS or EXIF), so this needs a dataset
 with camera metadata, or Ghats data from the outreach requests.
 
+### A second leopard dataset: LeopardID102 (in progress)
+
+Every Phase 3 number above comes from one survey in Botswana. To see whether the model
+holds up on leopards from a different survey, and to get the timestamps and camera
+positions the travel prior needs, I'm adding
+[LeopardID102](https://huggingface.co/datasets/WildCAT-Datasets/LeopardID102)
+(CC BY-NC-SA 4.0): 717 camera-trap photos of 101 named leopards from a 2021 survey in
+Zimbabwe, plus 148 unidentified ones. (The name says 102; the release has 101 named
+folders.) The capture time and camera are in each file name, and `locations.csv` gives
+the 105 camera positions.
+
+```bash
+python scripts/16_leopard102_manifest.py   # list images, parse camera + time from file names
+python scripts/02_run_detector.py --manifest data/leopard102/manifest.csv \
+    --out outputs/phase3/leopard102/detections.jsonl
+python scripts/17_leopard102_crops.py      # top MegaDetector box per image -> crops, real encounters
+python scripts/18_flank_classifier.py      # left/right flank labels, trained on Leopard ID 2022
+```
+
+It needed three things Leopard ID 2022 came with:
+
+- **Boxes.** It ships full frames only, so MegaDetector finds the leopard. It puts a box
+  scoring 0.2 or more on 97.8% of the named photos (701 of 717), and no leopard loses all
+  of its photos. The leopards are small: the median box covers 8% of the frame.
+- **Encounters.** Here they come from real timestamps: one leopard at one camera with no
+  gap over 30 minutes (`ghats.reid.time_encounters`), instead of the image-id proxy
+  above. That gives 367 encounters; 67 leopards appear in two or more, so only they can
+  be queries.
+- **Flank labels.** Re-ID only compares left with left and right with right, and this
+  dataset has no viewpoint labels. So I trained a left/right classifier on Leopard ID
+  2022's labels (frozen DINOv2-S features + logistic regression) and applied it here.
+
+**The flank classifier.** DINOv2 was pretrained with random horizontal flips, so its
+summary (CLS) token is partly blind to which way an animal faces. That's exactly the
+thing this classifier needs. I add the difference between the mean patch features of the
+left and right halves of the crop, which do keep position. On unseen Leopard ID 2022
+leopards it gets **93.8%** (picked on val leopards). The patch-difference features win
+on val (93.1% vs 91.9%) and tie on test. With no labels on LeopardID102, I checked it
+two ways ([`flank.md`](reports/phase3/flank.md)):
+
+- **By eye**, on 40 random crops ([`flank_check.jpg`](reports/phase3/flank_check.jpg)):
+  36 clearly right, none clearly wrong, 4 I couldn't call myself (nearly black, a
+  washed-out close-up with no head, a dark partial view, one facing the camera).
+- **a/b frames.** Some files come in pairs ending `a` and `b` with the same camera and
+  second. I first took these as two cameras facing each other across a path, which would
+  show opposite flanks. The classifier said "same side" for 72 of 73 pairs. Looking at
+  them settled it: they're two shots of the same moment from the same side, sometimes one
+  zoomed in. So that's a consistency check, not an accuracy measure.
+
+One gap: Leopard ID 2022 crops include only left and right views, so the classifier
+always picks a side, even for a leopard walking straight at the camera. Those crops get
+a label that means little. They're a small share here because the cameras are set beside
+trails.
+
+Next: run the Phase 3 model on these leopards as they are, then try them as extra
+training data, then the travel prior.
+
 ## Repository layout
 
 ```
 configs/phase1.yaml        dataset, sampling, detector, evaluation settings
 configs/phase2.yaml        bigger sample for classification, crop and split settings
-configs/phase3.yaml        leopard dataset, crops, split by individual, re-ID models
+configs/phase3.yaml        leopard datasets, crops, split by individual, re-ID models
 src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid, reid_model
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
 scripts/12..15             leopard crops -> re-ID baseline -> ArcFace fine-tune -> open set (Phase 3)
+scripts/16..18             LeopardID102: manifest -> crops from detector boxes -> flank classifier
 tests/                     unit tests + synthetic end-to-end pipeline test
 reports/phase1, phase2/    generated results (committed)
 ```
@@ -403,4 +461,5 @@ reports/phase1, phase2/    generated results (committed)
   Specialist Group's Saola Working Group.
 - MegaDetector V6 via [PyTorch-Wildlife](https://github.com/microsoft/CameraTraps).
 - Leopard ID 2022, CDLA-Permissive-1.0, Wild Me and Botswana Predator Conservation Trust, via LILA BC.
+- LeopardID102, CC BY-NC-SA 4.0, via Hugging Face (WildCAT-Datasets). Non-commercial; images are not in this repo.
 - DINOv2 (Meta) via timm; SpeciesNet (Google) weights from Addax Data Science.

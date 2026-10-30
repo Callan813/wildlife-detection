@@ -18,6 +18,7 @@ never seen during training.
 from __future__ import annotations
 
 import random
+import re
 from collections.abc import Sequence
 
 import numpy as np
@@ -70,6 +71,39 @@ def assign_encounters(image_ids: pd.Series, names: pd.Series) -> pd.Series:
                 run_of[(img, name)] = runs
         prev = per_image[img]
     return pd.Series([f"enc{run_of[(i, n)]}" for i, n in zip(image_ids, names)], index=image_ids.index)
+
+
+_SPOTTED_NAME = re.compile(r"_(CAM\d+)-.*?_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})_?(.*)$")
+
+
+def parse_spotted_filename(stem: str) -> dict[str, str]:
+    """Camera, capture time and pair side from a LeopardID102 file name (no extension).
+
+    Names look like CTS2021_CAM15-C07-2505_2021-05-11_13-37-30_I_00005a. A trailing
+    a/b marks the two cameras of a paired station firing together; "" otherwise.
+    """
+    m = _SPOTTED_NAME.search(stem)
+    if not m:
+        raise ValueError(f"unexpected file name: {stem}")
+    camera, day, hh, mm, ss, tail = m.groups()
+    side = tail[-1] if tail[-1:] in ("a", "b") and tail[-2:-1].isdigit() else ""
+    return {"camera": camera, "time": f"{day} {hh}:{mm}:{ss}", "pair_side": side}
+
+
+def time_encounters(names: pd.Series, cameras: pd.Series, times: pd.Series, gap_minutes: float = 30) -> pd.Series:
+    """Encounter id per crop when capture times are known: one leopard at one camera, no gap over gap_minutes.
+
+    Both cameras of a paired station share a camera id, so the a and b frames of one
+    pass land in the same encounter.
+    """
+    df = pd.DataFrame({"name": names, "camera": cameras, "t": pd.to_datetime(times)})
+    df = df.sort_values(["name", "camera", "t"])
+    new = (
+        (df["name"] != df["name"].shift())
+        | (df["camera"] != df["camera"].shift())
+        | (df["t"] - df["t"].shift() > pd.Timedelta(minutes=gap_minutes))
+    )
+    return ("enc" + new.cumsum().astype(str)).reindex(names.index)
 
 
 def retrieval_metrics(
