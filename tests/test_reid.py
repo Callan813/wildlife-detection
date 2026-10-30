@@ -107,3 +107,13 @@ def test_query_mask_scores_subset_but_keeps_gallery():
     only_a = retrieval_metrics(emb, ids, enc, queries=[True, True, False, False])
     assert full["queries"] == 4 and only_a["queries"] == 2
     assert only_a["top1"] == 1.0
+
+
+def test_sim_offset_can_rule_out_a_candidate():
+    # B's crop is the nearest to A's query, but the prior rules it out.
+    emb = l2_normalise(np.array([[1.0, 0.0], [0.9, 0.1], [0.7, 0.7]]))
+    ids, enc = ["A", "B", "A"], ["e1", "e2", "e3"]
+    assert retrieval_metrics(emb, ids, enc, queries=[True, False, False])["top1"] == 0.0
+    offset = np.zeros((3, 3))
+    offset[0, 1] = -np.inf
+    assert retrieval_metrics(emb, ids, enc, queries=[True, False, False], sim_offset=offset)["top1"] == 1.0

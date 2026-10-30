@@ -16,7 +16,7 @@ what needs a human decision.
 |---|---|---|
 | 1 | Animal detection and empty-frame filtering (MegaDetector V6) | **Done** (results below) |
 | 2 | Species classification for Ghats groups, location-split evaluation, SpeciesNet baseline | **Done** (results below) |
-| 3 | Leopard re-identification (metric learning + travel-feasibility prior) | **Done**, except the travel prior (no location data) |
+| 3 | Leopard re-identification (metric learning + travel-feasibility prior) | **Done**; travel prior tested on a second dataset (LeopardID102) |
 | 4 | Natural-language search over detections (BioCLIP/CLIP + vector DB) | Planned |
 | 5 | Reviewer dashboard with an active-learning loop | Planned |
 | 6 | Edge deployment: ONNX/INT8 on Raspberry Pi 5 or Jetson, cascade design, benchmarks | Planned |
@@ -377,10 +377,8 @@ threshold tuned on one population doesn't transfer exactly. A deployment in the 
 would need to recalibrate on its own labelled photos, and in a reviewer-in-the-loop setup
 that calibration comes for free as reviewers confirm or reject matches.
 
-**Not done: the travel-feasibility prior.** The plan was to rule out matches that would
-need a leopard to cross a reserve faster than leopards travel, using camera locations and
-times. Leopard ID 2022 has neither (no timestamps, GPS or EXIF), so this needs a dataset
-with camera metadata, or Ghats data from the outreach requests.
+**The travel-feasibility prior** needs camera locations and times, and Leopard ID 2022
+has neither (no timestamps, GPS or EXIF). It's tested on LeopardID102 below.
 
 ### A second leopard dataset: LeopardID102 (in progress)
 
@@ -400,6 +398,7 @@ python scripts/02_run_detector.py --manifest data/leopard102/manifest.csv \
 python scripts/17_leopard102_crops.py      # top MegaDetector box per image -> crops, real encounters
 python scripts/18_flank_classifier.py      # left/right flank labels, trained on Leopard ID 2022
 python scripts/19_leopard102_zero_shot.py  # Phase 3 model on these leopards, no retraining
+python scripts/21_travel_prior.py          # rule out matches by camera distance and time
 ```
 
 It needed three things Leopard ID 2022 came with:
@@ -470,8 +469,43 @@ Smaller results, each within the noise (about ±6 points with 67 leopards): nigh
 points of top-1 and 20 points of mAP. Full numbers in
 [`leopard102_zero_shot.md`](reports/phase3/leopard102_zero_shot.md).
 
-Next: add these leopards to training and see whether the Botswana test set improves,
-then the travel prior with the camera positions and times.
+**Where and when: the travel prior.** LeopardID102 gives every photo a time and a camera
+position in km (cameras about 3.7 km apart, survey area about 68 km across). That allows
+ruling out candidates before looking at spots
+(`python scripts/21_travel_prior.py`, [`travel_prior.md`](reports/phase3/travel_prior.md)):
+
+- **Speed rule:** no match that would need the leopard to average more than 3 km/h
+  between the two cameras. Set loose on purpose, not tuned.
+- **Distance rule:** no match between cameras more than D km apart, since leopards keep to
+  home ranges. D can't be chosen on the leopards it's scored on, so the query leopards
+  are split in half: D is picked on one half and scored on the other, then swapped,
+  over 20 random splits. It picked 7.5 km almost every time.
+
+| LeopardID102, ArcFace model (no retraining) | Top-1 | Top-5 | Top-10 | mAP |
+|---|---|---|---|---|
+| Appearance only, match at another camera | 42.8% | 59.3% | 64.6% | 40.6% |
+| + speed rule | 42.8% | 59.4% | 64.6% | 40.7% |
+| **+ speed + distance rule** | **53.9%** | **76.3%** | **83.0%** | **56.5%** |
+
+The speed rule does nothing here. It removes 1.2% of candidates and never a true match,
+because re-sightings are days or weeks apart (median 14 days), and in that time a leopard
+could be anywhere in the survey. It would only matter for photos minutes or hours apart.
+
+The distance rule is where the gain is. It removes 90% of the candidates, and the right
+leopard is in the top 10 for 83% of leopards instead of 65%. But it isn't free:
+
+- **It rules out some true matches.** At 7.5 km, 746 of 8,630 same-leopard pairs (8.6%)
+  are further apart than that. A leopard that wanders further than usual becomes
+  impossible to match, and the error is silent.
+- **The cutoff belongs to this survey.** Home range size depends on the sex, the habitat
+  and how much prey there is, so 7.5 km from Zimbabwe says little about the Ghats. A
+  Ghats survey would have to set its own from confirmed re-sightings.
+- **Survey size matters.** In a 68 km survey most leopards are far from any one camera,
+  so a distance rule removes a lot. In a small survey it would remove little.
+
+So in a real system I'd use distance to *sort* the shortlist (nearby candidates first)
+rather than hide anything, and let the reviewer widen the search. That fits the Phase 5
+reviewer dashboard.
 
 ## Repository layout
 
@@ -483,7 +517,7 @@ src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, 
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
 scripts/12..15             leopard crops -> re-ID baseline -> ArcFace fine-tune -> open set (Phase 3)
-scripts/16..19             LeopardID102: manifest -> crops from detector boxes -> flank classifier -> zero-shot re-ID
+scripts/16..21             LeopardID102: manifest -> crops -> flank classifier -> zero-shot re-ID -> compare -> travel prior
 tests/                     unit tests + synthetic end-to-end pipeline test
 reports/phase1, phase2/    generated results (committed)
 ```

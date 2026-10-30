@@ -113,6 +113,7 @@ def retrieval_metrics(
     views: Sequence[str] | None = None,
     ks: Sequence[int] = (1, 5),
     queries: Sequence[bool] | None = None,
+    sim_offset: np.ndarray | None = None,
 ) -> dict[str, float]:
     """Top-k accuracy and mAP over all queries with at least one valid match.
 
@@ -126,11 +127,16 @@ def retrieval_metrics(
 
     ``queries`` (optional mask) scores only some crops as queries, e.g. night photos;
     every crop stays in the gallery.
+
+    ``sim_offset`` (optional n x n matrix) is added to the similarities before ranking,
+    for priors such as travel feasibility; -inf sends a candidate to the bottom.
     """
     ids, enc = np.asarray(ids), np.asarray(encounters)
     use = np.ones(len(ids), dtype=bool) if queries is None else np.asarray(queries, dtype=bool)
     v = np.asarray(views) if views is not None else np.zeros(len(ids), dtype=object)
     sim = emb @ emb.T
+    if sim_offset is not None:
+        sim = sim + sim_offset
     hits = {k: [] for k in ks}
     aps, who = [], []
     for q in np.flatnonzero(use):

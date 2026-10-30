@@ -57,3 +57,13 @@ leopard102:
   out: data/leopard102/crops
   min_conf: 0.2          # top animal box per image; below this the image is dropped
   encounter_gap_min: 30  # same leopard, same camera, no gap longer than this
+  locations: data/leopard102/LeopardID102/locations.csv   # camera x, y in km
+  travel:
+    # Speed rule: a match is impossible if the leopard would have had to move faster than
+    # this between the two cameras, averaged over the gap. Set loose on purpose, not tuned:
+    # a walking leopard does a few km/h, and the fastest move in this data is ~1.3 km/h.
+    max_speed_kmh: 3.0
+    # Distance rule: candidates further away than D km are ruled out. D is picked on half
+    # the leopards and tested on the other half (never on the leopards it's scored on).
+    distance_grid_km: [5, 7.5, 10, 12.5, 15, 20, 30]
+    folds_repeats: 20
