@@ -98,3 +98,12 @@ def test_open_set_hidden_leopards_are_new():
     assert r["known_identified"] == 1.0 and r["new_flagged"] == 1.0
     # Accept everything: no new leopard is flagged.
     assert open_set_rates(q, threshold=-1.0)["new_flagged"] == 0.0
+
+
+def test_query_mask_scores_subset_but_keeps_gallery():
+    emb = l2_normalise(np.array([[1.0, 0.0], [1.0, 0.1], [0.0, 1.0], [0.1, 1.0]]))
+    ids, enc = ["A", "A", "B", "B"], ["e1", "e2", "e3", "e4"]
+    full = retrieval_metrics(emb, ids, enc)
+    only_a = retrieval_metrics(emb, ids, enc, queries=[True, True, False, False])
+    assert full["queries"] == 4 and only_a["queries"] == 2
+    assert only_a["top1"] == 1.0

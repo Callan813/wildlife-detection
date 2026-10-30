@@ -399,6 +399,7 @@ python scripts/02_run_detector.py --manifest data/leopard102/manifest.csv \
     --out outputs/phase3/leopard102/detections.jsonl
 python scripts/17_leopard102_crops.py      # top MegaDetector box per image -> crops, real encounters
 python scripts/18_flank_classifier.py      # left/right flank labels, trained on Leopard ID 2022
+python scripts/19_leopard102_zero_shot.py  # Phase 3 model on these leopards, no retraining
 ```
 
 It needed three things Leopard ID 2022 came with:
@@ -438,8 +439,39 @@ always picks a side, even for a leopard walking straight at the camera. Those cr
 a label that means little. They're a small share here because the cameras are set beside
 trails.
 
-Next: run the Phase 3 model on these leopards as they are, then try them as extra
-training data, then the travel prior.
+**Does the model work on leopards from another survey?** I ran the ArcFace model,
+trained only on Botswana leopards, on these Zimbabwe leopards with no retraining
+(`python scripts/19_leopard102_zero_shot.py`). It's scored the same way as above, with
+the 34 leopards that have only one encounter left in as distractors.
+
+| LeopardID102, 67 query leopards | Top-1 | Top-5 | Top-10 | mAP |
+|---|---|---|---|---|
+| DINOv2-S, untrained | 21.4% | 31.1% | 41.2% | 14.3% |
+| DINOv2-S + ArcFace (Leopard ID 2022) | 59.6% | 70.7% | 76.1% | 51.5% |
+| DINOv2-S, untrained, match must be at another camera | 4.9% | 13.6% | 20.6% | 6.2% |
+| **DINOv2-S + ArcFace, match must be at another camera** | **42.7%** | **59.1%** | **64.5%** | **40.1%** |
+| *For reference: ArcFace on its own test set (Botswana)* | *40.2%* | *57.1%* | *64.5%* | *35.4%* |
+
+A model doing better on foreign data (59.6%) than on its own test set (40.2%) needs
+explaining before it's believed, so I checked where the correct matches come from.
+They aren't near-duplicates: only 3% are from the same day, and the median gap is 14
+days. But 66% are from the query's own camera, a different visit with the same
+background and angle. Requiring the match to come from a *different* camera drops
+top-1 to 42.7%, in line with the home test set. That's the honest number for following
+a leopard between cameras.
+
+The untrained row tells the rest of the story. Off-the-shelf DINOv2 gets 21.4% overall
+but only 4.9% across cameras, so it was mostly matching backgrounds. The fine-tuned model
+keeps 42.7% across cameras, so what it learned on Botswana leopards is the spots, and
+that carries over to another country's leopards and cameras without retraining.
+
+Smaller results, each within the noise (about ±6 points with 67 leopards): night queries
+(68% of photos) score no worse than day ones, and dropping the flank rule costs about 4
+points of top-1 and 20 points of mAP. Full numbers in
+[`leopard102_zero_shot.md`](reports/phase3/leopard102_zero_shot.md).
+
+Next: add these leopards to training and see whether the Botswana test set improves,
+then the travel prior with the camera positions and times.
 
 ## Repository layout
 
@@ -451,7 +483,7 @@ src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, 
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
 scripts/12..15             leopard crops -> re-ID baseline -> ArcFace fine-tune -> open set (Phase 3)
-scripts/16..18             LeopardID102: manifest -> crops from detector boxes -> flank classifier
+scripts/16..19             LeopardID102: manifest -> crops from detector boxes -> flank classifier -> zero-shot re-ID
 tests/                     unit tests + synthetic end-to-end pipeline test
 reports/phase1, phase2/    generated results (committed)
 ```

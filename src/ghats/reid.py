@@ -112,6 +112,7 @@ def retrieval_metrics(
     encounters: Sequence[str],
     views: Sequence[str] | None = None,
     ks: Sequence[int] = (1, 5),
+    queries: Sequence[bool] | None = None,
 ) -> dict[str, float]:
     """Top-k accuracy and mAP over all queries with at least one valid match.
 
@@ -122,13 +123,17 @@ def retrieval_metrics(
     ``top{k}`` averages over queries, so a leopard photographed 150 times counts 150
     times; ``top{k}_per_id`` averages each individual's hit rate first, so every
     individual counts the same (like macro F1).
+
+    ``queries`` (optional mask) scores only some crops as queries, e.g. night photos;
+    every crop stays in the gallery.
     """
     ids, enc = np.asarray(ids), np.asarray(encounters)
+    use = np.ones(len(ids), dtype=bool) if queries is None else np.asarray(queries, dtype=bool)
     v = np.asarray(views) if views is not None else np.zeros(len(ids), dtype=object)
     sim = emb @ emb.T
     hits = {k: [] for k in ks}
     aps, who = [], []
-    for q in range(len(ids)):
+    for q in np.flatnonzero(use):
         keep = (enc != enc[q]) & (v == v[q])
         keep[q] = False
         if not keep.any():
