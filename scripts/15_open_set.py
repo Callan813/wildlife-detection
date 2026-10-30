@@ -13,9 +13,10 @@ matched correctly and confidently. The threshold that best balances the two
 (ghats.reid.open_set_rates), and the strictest one that keeps 90% of the correct
 identifications, are picked on val and applied unchanged to test.
 
-Models: the ArcFace fine-tune from scripts/14_train_reid.py and, for comparison, the
-best untrained baseline (SpeciesNet features cached by 13_reid_baseline.py). Writes
-reports/phase3/open_set.{md,csv,png}.
+Models: the ArcFace fine-tunes from scripts/14_train_reid.py (the original, and the two
+seeds trained with LeopardID102 leopards added, where present) and, for comparison, the
+best untrained baseline (SpeciesNet features cached by 13_reid_baseline.py). All models
+see the same draws. Writes reports/phase3/open_set.{md,csv,png}.
 """
 
 from __future__ import annotations
@@ -36,6 +37,12 @@ from ghats.config import load_config
 from ghats.reid import l2_normalise, open_set_queries, open_set_rates
 
 KEEP = 0.9  # share of closed-set identifications the conservative threshold keeps
+MODELS = {  # label -> checkpoint; None = SpeciesNet features from the baseline cache
+    "DINOv2-S + ArcFace": "outputs/phase3/reid/best.pt",
+    "ArcFace + LeopardID102, seed 0": "outputs/phase3/reid_lp102_s0/best.pt",
+    "ArcFace + LeopardID102, seed 1": "outputs/phase3/reid_lp102_s1/best.pt",
+    "SpeciesNet, untrained": None,
+}
 
 
 def simulate(emb: np.ndarray, crops: pd.DataFrame, draws: int, seed: int) -> pd.DataFrame:
@@ -62,11 +69,11 @@ def auroc(queries: pd.DataFrame) -> float:
     return float(roc_auc_score(~queries["is_new"], queries["best_sim"]))
 
 
-def embeddings(name: str, crops: pd.DataFrame, cfg: dict, args) -> np.ndarray:
-    if name == "speciesnet":
+def embeddings(checkpoint: str | None, crops: pd.DataFrame, cfg: dict, args) -> np.ndarray:
+    if checkpoint is None:
         z = np.load(Path(args.baseline_cache) / "speciesnet.npz", allow_pickle=True)
         return l2_normalise(pd.DataFrame(z["x"], index=z["crop_id"]).loc[crops["crop_id"]].to_numpy())
-    cache = Path(args.model).with_name("embeddings.npz")
+    cache = Path(checkpoint).with_name("embeddings.npz")
     if cache.exists() and list(np.load(cache)["crop_id"]) == crops["crop_id"].tolist():
         return np.load(cache)["x"]
     import torch
@@ -74,7 +81,7 @@ def embeddings(name: str, crops: pd.DataFrame, cfg: dict, args) -> np.ndarray:
     from ghats.reid_model import embed, eval_loader, load_trained
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = load_trained(Path(args.model), device)
+    model = load_trained(Path(checkpoint), device)
     out_dir = Path(cfg["crops"]["out"])
     paths = [out_dir / "images" / f"{c}.jpg" for c in crops["crop_id"]]
     emb = embed(model, eval_loader(paths, cfg["train"], model), device)
@@ -85,7 +92,6 @@ def embeddings(name: str, crops: pd.DataFrame, cfg: dict, args) -> np.ndarray:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default="configs/phase3.yaml")
-    ap.add_argument("--model", default="outputs/phase3/reid/best.pt")
     ap.add_argument("--baseline-cache", default="outputs/phase3/embeddings")
     ap.add_argument("--draws", type=int, default=20)
     ap.add_argument("--reports", default="reports/phase3")
@@ -97,8 +103,11 @@ def main() -> int:
     grid = np.round(np.arange(-0.2, 1.0, 0.01), 2)
 
     rows, curves, summary = [], {}, []
-    for model, label in [("arcface", "DINOv2-S + ArcFace"), ("speciesnet", "SpeciesNet, untrained")]:
-        emb = embeddings(model, crops, cfg, args)
+    for label, checkpoint in MODELS.items():
+        if checkpoint and not Path(checkpoint).exists():
+            print(f"missing {checkpoint}, skipping {label}")
+            continue
+        emb = embeddings(checkpoint, crops, cfg, args)
         q = {}
         for split in ("val", "test"):
             m = (crops["split"] == split).to_numpy()

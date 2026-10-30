@@ -378,6 +378,28 @@ threshold tuned on one population doesn't transfer exactly. A deployment in the 
 would need to recalibrate on its own labelled photos, and in a reviewer-in-the-loop setup
 that calibration comes for free as reviewers confirm or reject matches.
 
+**With more training leopards.** I reran this on the same draws with the two models
+trained with LeopardID102 leopards added (see below). The plot above includes them.
+
+| Test, 107 unseen leopards | No "new" option | Strict threshold (known / new) | Best balance (known / new) | AUROC |
+|---|---|---|---|---|
+| ArcFace, original | 46.6% | 44.8% / 24.2% | 29.3% / 94.5% | 0.778 |
+| ArcFace + LeopardID102, seed 0 | 56.1% | 50.6% / 45.9% | 43.8% / 78.9% | 0.798 |
+| ArcFace + LeopardID102, seed 1 | 58.3% | 54.4% / 35.0% | 38.4% / 92.7% | 0.800 |
+
+Both new curves sit above the original everywhere. At any rate of flagging new
+leopards, more known leopards get identified: at about 80% flagged, roughly 43% instead
+of 36%. But the gain comes from somewhere specific. AUROC, which measures how well the
+best-match similarity alone separates known from new leopards, barely moves (0.778 to
+about 0.80, likely within noise). What improved is ranking: the right leopard comes
+first more often (46.6% to 56–58% with no "new" option), and that lifts the whole curve.
+The model is better at saying *which* leopard; it isn't much better at knowing when it
+doesn't know.
+
+The threshold problem is still there. The two seeds land on quite different operating
+points from the same rules (best balance: 43.8% / 78.9% vs 38.4% / 92.7%), so a fixed
+threshold remains fragile, and local recalibration from reviewer feedback still matters.
+
 **The travel-feasibility prior** needs camera locations and times, and Leopard ID 2022
 has neither (no timestamps, GPS or EXIF). It's tested on LeopardID102 below.
 
