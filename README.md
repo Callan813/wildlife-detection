@@ -340,7 +340,8 @@ points, which is within the noise of ~100 test leopards (about ±5 points); top-
 gain 10 points each, which is not. The training loss reached almost zero by epoch 10 while
 val top-1 stayed at 35–39%, so with 2,450 training photos the model memorises the training
 leopards faster than it learns general spot matching. More leopards would help more than
-more epochs. Details in [`reid_finetune.md`](reports/phase3/reid_finetune.md).
+more epochs. Details in [`reid_finetune.md`](reports/phase3/reid_finetune.md). (Tested
+below: adding 101 leopards from another dataset lifts top-1 by about 10 points.)
 
 In practice that makes this a ranking tool, not an automatic identifier: show a reviewer
 the top 5 or 10 candidates and let them confirm, which is the Phase 5 dashboard.
@@ -380,7 +381,7 @@ that calibration comes for free as reviewers confirm or reject matches.
 **The travel-feasibility prior** needs camera locations and times, and Leopard ID 2022
 has neither (no timestamps, GPS or EXIF). It's tested on LeopardID102 below.
 
-### A second leopard dataset: LeopardID102 (in progress)
+### A second leopard dataset: LeopardID102
 
 Every Phase 3 number above comes from one survey in Botswana. To see whether the model
 holds up on leopards from a different survey, and to get the timestamps and camera
@@ -398,6 +399,8 @@ python scripts/02_run_detector.py --manifest data/leopard102/manifest.csv \
 python scripts/17_leopard102_crops.py      # top MegaDetector box per image -> crops, real encounters
 python scripts/18_flank_classifier.py      # left/right flank labels, trained on Leopard ID 2022
 python scripts/19_leopard102_zero_shot.py  # Phase 3 model on these leopards, no retraining
+python scripts/14_train_reid.py --leopard102 --out outputs/phase3/reid_lp102_s0 --tag _lp102_s0  # add to training
+python scripts/20_compare_reid.py          # same test leopards, paired bootstrap, two seeds each
 python scripts/21_travel_prior.py          # rule out matches by camera distance and time
 ```
 
@@ -468,6 +471,45 @@ Smaller results, each within the noise (about ±6 points with 67 leopards): nigh
 (68% of photos) score no worse than day ones, and dropping the flank rule costs about 4
 points of top-1 and 20 points of mAP. Full numbers in
 [`leopard102_zero_shot.md`](reports/phase3/leopard102_zero_shot.md).
+
+**Do more training leopards help?** The fine-tuned model memorised its 209 training
+leopards, so the obvious fix is more leopards. I added all 101 LeopardID102 leopards to
+training (310 leopards, 3,151 crops) and kept everything else the same, including the
+Botswana val and test leopards, so the test numbers compare directly
+(`python scripts/14_train_reid.py --leopard102 ...`, then `scripts/20_compare_reid.py`).
+
+There are two kinds of luck to rule out. One is which leopards happen to be in the test
+set. A paired bootstrap handles that: every model is scored on the same 107 leopards, so
+I resample the leopards and see how much the difference moves. The other is training
+randomness, which the bootstrap can't see. So I trained each setup twice with different
+seeds.
+
+| Test, 107 Botswana leopards | Top-1 | Top-5 | Top-10 | mAP |
+|---|---|---|---|---|
+| Leopard ID 2022 only, seed 0 | 40.2% | 57.1% | 64.5% | 35.4% |
+| Leopard ID 2022 only, seed 1 | 40.5% | 54.4% | 62.0% | 35.7% |
+| + LeopardID102, seed 0 | 50.2% | 66.3% | 71.5% | 43.1% |
+| **+ LeopardID102, seed 1** | **53.3%** | **66.1%** | **72.3%** | **44.5%** |
+
+| Change in top-1 (95% interval over test leopards) | |
+|---|---|
+| New seed, same data | +0.3 (−4.9 to +5.6) |
+| Add LeopardID102, seed 0 | +10.1 (+2.1 to +18.5) |
+| Add LeopardID102, seed 1 | +12.8 (+3.5 to +22.3) |
+
+Changing the seed does nothing measurable, and adding the leopards gains 10–13 points
+with both intervals above zero. Top-5 and top-10 agree
+([`reid_compare.md`](reports/phase3/reid_compare.md)). The memorising eased too: the
+final training loss is about 0.9 instead of 0.05. Three caveats:
+
+- **The size of the gain is loose.** The intervals run from about +2 to +20, so "about
+  10 points" is honest and "exactly 12" isn't.
+- **I can't separate "more leopards" from "different leopards".** The new ones come
+  from another country, other cameras and night-heavy footage, so the gain may partly be
+  from variety rather than numbers. A clean test would add the same number of leopards
+  from the same survey, and there aren't any spare.
+- **These models have trained on LeopardID102,** so they can't be tested on it. The
+  zero-shot and travel-prior results above use the model that never saw it.
 
 **Where and when: the travel prior.** LeopardID102 gives every photo a time and a camera
 position in km (cameras about 3.7 km apart, survey area about 68 km across). That allows

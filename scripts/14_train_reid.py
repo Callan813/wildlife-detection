@@ -10,6 +10,13 @@ baseline (ghats.reid), and the best epoch by val top-1 per leopard is kept. Epoc
 untrained backbone at the same input size, for a fair before/after.
 
 Writes outputs/phase3/reid/{best.pt,history.csv} and reports/phase3/reid_finetune.md.
+
+--leopard102 adds every LeopardID102 leopard (crops from 17_leopard102_crops.py, flanks
+from 18_flank_classifier.py) to the training set as extra classes. Val and test stay the
+Leopard ID 2022 leopards, so the test numbers are directly comparable. Use --tag and a
+separate --out so the original model and report are kept, e.g.
+
+    python scripts/14_train_reid.py --leopard102 --out outputs/phase3/reid_lp102 --tag _lp102
 """
 
 from __future__ import annotations
@@ -41,13 +48,16 @@ def main() -> int:
     ap.add_argument("--reports", default="reports/phase3")
     ap.add_argument("--epochs", type=int, help="Override the config")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--leopard102", action="store_true", help="Add LeopardID102 leopards to training")
+    ap.add_argument("--tag", default="", help="Suffix for the report file names")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
     t, ks = cfg["train"], cfg["reid"]["ks"]
-    epochs = args.epochs or t["epochs"]
+    epochs = t["epochs"] if args.epochs is None else args.epochs
     size = tuple(t["size"])
-    torch.manual_seed(0)
+    torch.manual_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     crop_dir = Path(cfg["crops"]["out"])
@@ -56,9 +66,17 @@ def main() -> int:
     train = crops[crops["split"] == "train"].reset_index(drop=True)
     val = crops[crops["split"] == "val"].reset_index(drop=True)
     test = crops[crops["split"] == "test"].reset_index(drop=True)
+    if args.leopard102:
+        lp_dir = Path(cfg["leopard102"]["out"])
+        lp = pd.read_csv(lp_dir / "crops.csv", keep_default_na=False)
+        lp["path"] = [lp_dir / "images" / f"{c}.jpg" for c in lp["crop_id"]]
+        lp["name"] = "lp102_" + lp["name"]
+        train = pd.concat([train, lp[["name", "viewpoint", "path"]]], ignore_index=True)
     flank = train["name"] + "/" + train["viewpoint"]
     classes = {c: k for k, c in enumerate(sorted(flank.unique()))}
-    print(f"train: {len(train):,} crops, {len(classes)} leopard flanks; val {len(val):,}; test {len(test):,}")
+    print(
+        f"train: {len(train):,} crops, {train['name'].nunique()} leopards, {len(classes)} flanks; val {len(val):,}; test {len(test):,}"
+    )
 
     model = Embedder(t["backbone"], t["embed_dim"]).to(device)
     data_cfg = model.backbone.pretrained_cfg
@@ -137,11 +155,11 @@ def main() -> int:
     cols = [f"top{k}_per_id" for k in ks] + ["mAP", "top1"]
     heads = [f"Top-{k}" for k in ks] + ["mAP", "Top-1 per query"]
     lines = [
-        "# Phase 3: DINOv2-S fine-tuned with ArcFace",
+        "# Phase 3: DINOv2-S fine-tuned with ArcFace" + (" + LeopardID102 leopards" if args.leopard102 else ""),
         "",
         (
             f"Trained on {len(train):,} crops of {train['name'].nunique()} leopards ({len(classes)} flanks), "
-            f"{epochs} epochs, input {size[0]}x{size[1]}; best epoch {best_epoch} by val top-1 per leopard. "
+            f"{epochs} epochs, input {size[0]}x{size[1]}, seed {args.seed}; best epoch {best_epoch} by val top-1 per leopard. "
             f"Test: {len(test):,} crops of {test['name'].nunique()} leopards never seen in training, scored as in "
             "reid_baseline.md (no same-encounter matches, same flank only, top-k averaged per leopard)."
         ),
@@ -151,12 +169,12 @@ def main() -> int:
         "| DINOv2-S, untrained (same input size) | " + " | ".join(f"{test_before[c]:.1%}" for c in cols) + " |",
         "| DINOv2-S + ArcFace | " + " | ".join(f"{test_after[c]:.1%}" for c in cols) + " |",
         "",
-        "Per-epoch val scores are in outputs/phase3/reid/history.csv.",
+        f"Per-epoch val scores are in {Path(args.out).as_posix()}/history.csv.",
     ]
     reports = Path(args.reports)
     reports.mkdir(parents=True, exist_ok=True)
-    (reports / "reid_finetune.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    pd.DataFrame(history).to_csv(reports / "reid_finetune_history.csv", index=False)
+    (reports / f"reid_finetune{args.tag}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    pd.DataFrame(history).to_csv(reports / f"reid_finetune{args.tag}_history.csv", index=False)
     print("\n".join(lines))
     return 0
 
