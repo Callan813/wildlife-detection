@@ -422,7 +422,9 @@ leopards it gets **93.8%** (picked on val leopards). The patch-difference featur
 on val (93.1% vs 91.9%) and tie on test. With no labels on LeopardID102, I checked it
 two ways ([`flank.md`](reports/phase3/flank.md)):
 
-- **By eye**, on 40 random crops ([`flank_check.jpg`](reports/phase3/flank_check.jpg)):
+- **By eye**, on 40 random crops (the script draws them into `reports/phase3/flank_check.jpg`; not
+  committed, since the photos are under a non-commercial licence; the picks are in
+  [`flank_check.csv`](reports/phase3/flank_check.csv)):
   36 clearly right, none clearly wrong, 4 I couldn't call myself (nearly black, a
   washed-out close-up with no head, a dark partial view, one facing the camera).
 - **a/b frames.** Some files come in pairs ending `a` and `b` with the same camera and

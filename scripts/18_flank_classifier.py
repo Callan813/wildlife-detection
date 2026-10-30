@@ -12,7 +12,7 @@ to LeopardID102:
    accuracy reported on test leopards.
 3. Predict LeopardID102. There are no labels to score against, so:
    - A grid of random crops with their predicted side, checked by eye
-     (reports/phase3/flank_check.jpg). This is the real accuracy check.
+     (reports/phase3/flank_check.jpg, gitignored: LeopardID102 is NC-SA). This is the real accuracy check.
    - a/b frames: files ending a and b with the same camera and second are two shots
      of the same moment from the same side (I first assumed facing cameras; looking
      at them showed otherwise). They should get the same side. Only a consistency

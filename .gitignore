@@ -10,6 +10,8 @@ __pycache__/
 .ruff_cache/
 # Reports are small and worth committing, except the big frame-level dump
 reports/**/frame_scores.csv
+# Shows LeopardID102 photos (CC BY-NC-SA), kept local
+reports/phase3/flank_check.jpg
 
 # Local assistant notes, not part of the project
 CLAUDE.md
