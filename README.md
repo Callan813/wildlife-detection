@@ -18,7 +18,7 @@ what needs a human decision.
 | 2 | Species classification for Ghats groups, location-split evaluation, SpeciesNet baseline | **Done** (results below) |
 | 3 | Leopard re-identification (metric learning + travel-feasibility prior) | **Done**; travel prior tested on a second dataset (LeopardID102) |
 | 4 | Natural-language search over detections (BioCLIP/CLIP + vector DB) | Planned |
-| 5 | Reviewer dashboard with an active-learning loop | Planned |
+| 5 | Reviewer dashboard with an active-learning loop | **Done**: review + audit sample + threshold re-tuning; retraining from reviews not yet |
 | 6 | Edge deployment: ONNX/INT8 on Raspberry Pi 5 or Jetson, cascade design, benchmarks | Planned |
 
 ## Phase 1: detection and empty-frame filtering
@@ -571,19 +571,106 @@ So in a real system I'd use distance to *sort* the shortlist (nearby candidates 
 rather than hide anything, and let the reviewer widen the search. That fits the Phase 5
 reviewer dashboard.
 
+## Phase 5: reviewer dashboard
+
+**Question:** the models are good at ranking but not sure enough to act alone. Species
+accuracy is about 71% per crop, and the right leopard is first about half the time. So
+how should people and models share the work?
+
+The answer is a review tool that shows people what the models are least sure about,
+records their decisions, and uses those decisions to measure and re-tune the models.
+
+![species review](reports/phase5/dashboard_species.png)
+
+**How it's built:**
+
+- **Python stays the ML side.** [`scripts/22_export_review.py`](scripts/22_export_review.py)
+  writes model outputs into a SQLite file: species probabilities for the 3,882 Phase 2
+  test crops, and a top-5 shortlist for each leopard photo from the best Phase 3 model.
+- **A Node.js + TypeScript API** ([`dashboard/server`](dashboard/server), Express,
+  zod validation, Node's built-in SQLite) serves the queues and images and records
+  decisions in its own tables, so re-exporting predictions never wipes reviews.
+- **A React + TypeScript UI** ([`dashboard/web`](dashboard/web), Vite) has a species
+  screen, a leopard screen and a stats screen, with keyboard shortcuts for speed.
+
+```bash
+python scripts/22_export_review.py   # model outputs -> outputs/phase5/review.db
+cd dashboard && npm install
+npm run dev:api                      # API on http://127.0.0.1:4317
+npm run dev:web                      # UI on http://localhost:5317 (second terminal)
+npm test                             # API tests (vitest + supertest)
+```
+
+**Species review.** Crops come least certain first (smallest gap between the top two
+guesses). The reviewer sees the whole camera frame with the box drawn on it, plus a
+close-up. A box often covers a few dozen pixels of a night photo, and a crop that small
+is too little for a person to judge, as the screenshot shows. One keypress accepts one
+of the model's top three; a menu covers the rest.
+
+**Leopard review.** This simulates a survey in progress. Half the test leopards are
+already in the catalogue, each from its first sighting. Every later photo is a review
+item, shown next to its top 5 catalogued leopards (same flank) and a "new leopard"
+suggestion when the best match is below the threshold.
+
+![leopard review](reports/phase5/dashboard_leopards.png)
+
+**The bias in uncertain-first review, and the fix.** I first tested the loop with a
+script playing a perfect reviewer (it answers from the dataset labels), and it showed a
+real problem. After 50 species reviews the model looked 22% accurate, against 71%
+overall. The re-tuned leopard threshold came out at a balanced accuracy of 52%, a coin
+flip. Both are the same bias. The queue shows the model's hardest cases by design, so
+measuring the model on them makes it look worse than it is. For the threshold, every
+reviewed item sat right at the old threshold (that's what "uncertain" meant), which
+says nothing about where it should move.
+
+The fix is a random **audit sample**. The export marks a random 20% of items, the queue
+slips one in after every four uncertain ones, and reviewers aren't told which is which.
+Accuracy and threshold calibration use audit items only. Simulated again (250 species
+and 300 leopard reviews):
+
+| | Uncertain items only | Random audit sample |
+|---|---|---|
+| Species model accuracy | 23% | **68%** (50 audit reviews; true overall 70.7%) |
+| Re-tuned "new leopard" threshold | 0.48, balanced accuracy 52% | **0.47**, balanced accuracy 70% (60 audit reviews) |
+
+As a check, all 243 audit items scored with the dataset labels put the best threshold
+at 0.51 (68%). So 60 reviews already get close, just with more noise.
+
+![stats](reports/phase5/dashboard_stats.png)
+
+**Why the starting threshold was wrong here.** The best-balance threshold from Phase 3
+(0.62) would suggest "new" for 92% of photos, against 66% that really are new. In the
+open-set test the gallery held every other photo of each leopard. Here the catalogue
+holds one sighting per leopard, so best-match scores run lower. That's the Phase 3
+lesson again: thresholds don't transfer, and the reviewer loop is how a real survey
+would set its own. The dashboard starts from the stricter val threshold (0.48) and
+reports the re-tuned one.
+
+**Not done yet:**
+- **Retraining from corrections.** Reviews are stored, but the models don't learn from
+  them yet.
+- **Applying the re-tuned threshold automatically.** It's reported, not used.
+- **Reviewer accounts.** The reviewer is a typed name, with no login.
+- **Distance-sorted shortlist.** The travel prior isn't in the UI, because Leopard ID
+  2022 has no camera positions.
+
 ## Repository layout
 
 ```
 configs/phase1.yaml        dataset, sampling, detector, evaluation settings
 configs/phase2.yaml        bigger sample for classification, crop and split settings
 configs/phase3.yaml        leopard datasets, crops, split by individual, re-ID models
-src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid, reid_model
+configs/phase5.yaml        review export: models, threshold, audit sample
+src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid, reid_model, review
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
 scripts/12..15             leopard crops -> re-ID baseline -> ArcFace fine-tune -> open set (Phase 3)
 scripts/16..21             LeopardID102: manifest -> crops -> flank classifier -> zero-shot re-ID -> compare -> travel prior
+scripts/22                 export model outputs for the dashboard (Phase 5)
+dashboard/server           review API: Node.js, TypeScript, Express, SQLite
+dashboard/web              review UI: React, TypeScript, Vite
 tests/                     unit tests + synthetic end-to-end pipeline test
-reports/phase1, phase2/    generated results (committed)
+reports/phase1..5/          generated results and screenshots (committed)
 ```
 
 ## Data and models

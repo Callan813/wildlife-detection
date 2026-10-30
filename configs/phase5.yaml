@@ -1,0 +1,35 @@
+# Phase 5: reviewer dashboard
+#
+# scripts/22_export_review.py writes the review database from Phase 2 and 3 outputs;
+# the dashboard (dashboard/) reads it and adds the reviewers' decisions.
+
+db: outputs/phase5/review.db
+
+# A random share of items is marked as an audit sample. The queue mixes them in among the
+# uncertain items, and accuracy and threshold calibration are computed from them only:
+# items picked for being uncertain are a biased sample (all near the decision boundary).
+audit_frac: 0.2
+audit_seed: 0
+
+species:
+  # Phase 2's best classifier: frozen SpeciesNet features + logistic regression.
+  predictions: outputs/phase2/speciesnet_probe/predictions.csv
+  images: data/crops/images
+  crops: data/crops/crops.csv            # crop boxes (normalised x1, y1, x2, y2)
+  manifest: data/swg/manifest_phase2.csv # full frames, so reviewers see the whole scene
+  split: test
+
+reid:
+  # Best Phase 3 model: ArcFace with LeopardID102 leopards added to training (seed 1).
+  embeddings: outputs/phase3/reid_lp102_s1/test_embeddings.npz   # from scripts/20_compare_reid.py
+  crops: data/leopard/crops/crops.csv
+  images: data/leopard/crops/images
+  # Starting "new leopard" threshold, picked on val (reports/phase3/open_set.csv, strict rule).
+  # The best-balance one (0.62) suggests "new" for 92% of items here: this catalogue holds one
+  # sighting per leopard, so best-match scores run lower than in the open-set test. Thresholds
+  # don't transfer, so the dashboard recalibrates from reviewer decisions instead.
+  new_threshold: 0.48
+  # Survey simulation: this share of test leopards is already in the catalogue.
+  known_frac: 0.5
+  seed: 0
+  shortlist: 5

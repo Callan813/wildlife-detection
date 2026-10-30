@@ -13,5 +13,9 @@ reports/**/frame_scores.csv
 # Shows LeopardID102 photos (CC BY-NC-SA), kept local
 reports/phase3/flank_check.jpg
 
+# Dashboard (Node): dependencies and build output
+node_modules/
+dashboard/*/dist/
+
 # Local assistant notes, not part of the project
 CLAUDE.md
