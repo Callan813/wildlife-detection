@@ -143,6 +143,11 @@ Phase 2 trains a classifier on detector crops anyway, so it gets an extra
   confidence is noise (event AUC 0.53), but it gave every event, empty or not, a
   score of ~0.08. The old "98.8% recall at 0.06" came from that, not from real
   boxes. I found it while looking at Phase 2 misses (`scripts/10_miss_gallery.py`).
+  The first fix only dropped boxes of exactly zero height. Strips that end a pixel
+  or two inside the frame survived, and I only caught them when the reviewer
+  dashboard drew a 1-pixel box along the top of a photo: 1,531 of 23,643 Phase 2
+  crops. Boxes with a side under 16 px are now dropped too (every animal box that
+  small was one of these strips).
 - **The detector runs in eval mode, in batches.** PyTorch-Wildlife 1.3's
   `single_image_detection()` for the MIT model reloads the checkpoint on every call
   and leaves the network in training mode, so BatchNorm normalises each image with
@@ -182,28 +187,32 @@ on val macro F1.
 
 ### Results
 
-**Crops** (test, 2,383 crops): macro F1 **0.776**, accuracy 0.833. Best: junglefowl 0.93,
+**Crops** (test, 2,338 crops): macro F1 **0.775**, accuracy 0.830. Best: junglefowl 0.93,
 wild boar 0.91, bear 0.90. Worst: squirrel 0.46 and mongoose 0.49, small classes with
 20–50 test crops each. Background F1 is 0.84. Details in
-[`classifier_summary.md`](reports/phase2/classifier_summary.md).
+[`classifier_summary.md`](reports/phase2/classifier_summary.md) (written before the
+padding strips were removed, so it still counts 2,383 crops; the model was not retrained
+without the 192 strips in its training background, and on the cleaned test set its scores
+moved by 0.001-0.003).
 
 **Empty-event filtering** (test, 566 events from unseen cameras; each threshold is picked
 on val and applied unchanged to test):
 
 | Keep 90% of animal events | Empty events removed |
 |---|---|
-| Detector confidence (Phase 1 rule) | 54.7% |
-| Classifier: P(not background) of the best box | **69.3%** |
-| Classifier × detector | 60.0% |
+| Detector confidence (Phase 1 rule) | 55.3% |
+| Classifier: P(not background) of the best box | **70.7%** |
+| Classifier × detector | 63.3% |
 
 The classifier removes about 15 points more empty events at the same recall. Stricter
-targets are out of reach for every method: 25 of 416 animal test events (6%) have no
-detector box at all, so nothing downstream can recover them. Full table, including
+targets are out of reach for every method: 29 of 416 animal test events (7%) have no
+detector box at all, so nothing downstream can recover them. (It was 25 before the
+leftover padding strips were removed: in 4 events a strip was the only "box".) Full table, including
 per-group recall, in [`event_eval.md`](reports/phase2/event_eval.md).
 
 **Where it still fails** ([`missed_events.jpg`](reports/phase2/missed_events.jpg)).
-At the 90% threshold, 83 val/test animal events are dropped. 53 of them never had a box
-(a detector miss), and 30 had boxes the classifier called background. The detector is
+At the 90% threshold, 83 val/test animal events are dropped. 59 of them never had a box
+(a detector miss), and 24 had boxes the classifier called background. The detector is
 the bigger bottleneck, and it is worst on small animals: rodents, squirrels and martens.
 
 ### Against off-the-shelf classifiers
@@ -214,11 +223,11 @@ val/test boxes and maps their labels onto my groups:
 65M+ training images) and the Addax Data Science Central India model (IND-ADS, 40 labels,
 CC-BY-NC, used for evaluation only).
 
-| Model | Macro F1, 12 shared classes (2,139 test crops) | Empty events removed at 90% recall |
+| Model | Macro F1, 12 shared classes (2,094 test crops) | Empty events removed at 90% recall |
 |---|---|---|
-| Mine (ConvNeXt-Tiny, ~10k crops) | 0.812 | 69.3% |
-| SpeciesNet | **0.903** | **76.7%** |
-| IND-ADS (Central India) | 0.641 | 63.3% |
+| Mine (ConvNeXt-Tiny, ~10k crops) | 0.810 | 70.7% |
+| SpeciesNet | **0.902** | **80.7%** |
+| IND-ADS (Central India) | 0.641 | 59.3% |
 
 **SpeciesNet wins, with a caveat.** Its training data includes public camera-trap
 repositories, and I couldn't confirm whether SWG was among them. If it was, it has seen
@@ -236,17 +245,17 @@ takes its pooled 1,280-d features for every crop, and fits a logistic regression
 train cameras only. This is the same recipe the Central India model uses, just trained
 on my groups and cameras. It takes ~15 minutes on the 3050, mostly feature extraction.
 
-| Model | Macro F1, all 16 classes (2,383 test crops) | Macro F1, 12 shared classes | Empty events removed at 90% recall |
+| Model | Macro F1, all 16 classes (2,338 test crops) | Macro F1, 12 shared classes | Empty events removed at 90% recall |
 |---|---|---|---|
-| Mine (ConvNeXt-Tiny, trained end to end) | 0.776 | 0.812 | 69.3% |
-| **SpeciesNet features + my head** | **0.887** | **0.920** | 74.0% |
-| SpeciesNet off the shelf | n/a | 0.903 | 76.7% |
+| Mine (ConvNeXt-Tiny, trained end to end) | 0.775 | 0.810 | 70.7% |
+| **SpeciesNet features + my head** | **0.886** | **0.920** | 74.0% |
+| SpeciesNet off the shelf | n/a | 0.902 | **80.7%** |
 
 The probe is the best species classifier here, ahead even of SpeciesNet's own head on
 the shared classes. The biggest gains over my ConvNeXt are on the classes I had the least
-data for: mongoose 0.49 → 0.91, squirrel 0.46 → 0.65, sambar 0.77 → 0.94. For filtering
-empty events it is level with SpeciesNet (74.0% vs 76.7% is within the ±6 point noise of
-150 empty test events). Details in
+data for: mongoose 0.49 → 0.91, squirrel 0.46 → 0.64, sambar 0.77 → 0.95. For filtering
+empty events SpeciesNet is ahead (80.7% vs 74.0%), though the gap is about the size of the
+±6 point noise of 150 empty test events. Details in
 [`classifier_summary_probe.md`](reports/phase2/classifier_summary_probe.md).
 
 The SWG caveat still applies: if SpeciesNet's backbone was trained on these cameras, the

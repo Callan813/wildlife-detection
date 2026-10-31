@@ -28,7 +28,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from ghats.config import load_config
-from ghats.crops import BACKGROUND, SPLITS, crop_box, label_boxes, split_locations
+from ghats.crops import BACKGROUND, MIN_BOX_PX, SPLITS, box_side_px, crop_box, label_boxes, split_locations
 
 
 def load_animal_boxes(path: Path, max_per_image: int) -> pd.DataFrame:
@@ -43,6 +43,11 @@ def load_animal_boxes(path: Path, max_per_image: int) -> pd.DataFrame:
             for k, d in enumerate(animal[:max_per_image]):
                 rows.append({"image_id": str(rec["image_id"]), "box": k, "conf": d["conf"], "bbox": d["bbox"]})
     return pd.DataFrame(rows).drop_duplicates(["image_id", "box"], keep="last")
+
+
+def frame_size(path: str) -> tuple[int, int]:
+    with Image.open(path) as im:  # reads the header only
+        return im.size
 
 
 def write_crops(path: str, crops: list[tuple[str, list[float]]], out_dir: Path, c: dict) -> int:
@@ -87,6 +92,14 @@ def main() -> int:
     crops = label_boxes(boxes, c["min_conf"], c["train_min_conf"])
     crops["split"] = crops["location"].map(splits)
     crops["crop_id"] = crops["image_id"] + "_" + crops["box"].astype(str)
+    # Drop padding phantoms only now, after the ids are set: box numbers are confidence ranks
+    # within a frame, and renumbering would point real crops at a phantom's saved image.
+    with ThreadPoolExecutor(args.threads) as pool:
+        sizes = dict(zip(crops["local_path"].unique(), pool.map(frame_size, crops["local_path"].unique())))
+    side = [box_side_px(b, *sizes[p]) for b, p in zip(crops["bbox"], crops["local_path"])]
+    phantom = pd.Series(side, index=crops.index) < MIN_BOX_PX
+    print(f"dropped {phantom.sum():,} padding-phantom boxes (shorter side < {MIN_BOX_PX} px)")
+    crops = crops[~phantom]
 
     out = Path(args.out)
     img_dir = out / "images"

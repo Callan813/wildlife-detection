@@ -42,6 +42,7 @@ import numpy as np
 import pandas as pd
 
 from ghats.config import load_config
+from ghats.crops import MIN_BOX_PX, box_side_px
 from ghats.review import audit_ranks, shortlists, species_uncertainty, split_catalogue
 
 SCHEMA = """
@@ -106,12 +107,9 @@ def species_rows(cfg: dict) -> pd.DataFrame:
     )
 
 
-# Shorter box side in frame pixels below which a box is a padding phantom. The phantoms in the
-# Phase 2 test crops are all under 4 px; the smallest real box is far above 16.
-PHANTOM_PX = 8
-
-
 def phantom_boxes(frame_paths: pd.Series, boxes: pd.Series) -> np.ndarray:
+    """Padding phantoms (see ghats.crops.MIN_BOX_PX); crops made before 06 dropped them
+    are still in older predictions."""
     from PIL import Image
 
     out = []
@@ -119,10 +117,8 @@ def phantom_boxes(frame_paths: pd.Series, boxes: pd.Series) -> np.ndarray:
         if not isinstance(f, str) or not isinstance(b, str):
             out.append(False)
             continue
-        x1, y1, x2, y2 = json.loads(b)
         with Image.open(f) as im:  # reads the header only
-            w, h = im.size
-        out.append(min((x2 - x1) * w, (y2 - y1) * h) < PHANTOM_PX)
+            out.append(box_side_px(json.loads(b), *im.size) < MIN_BOX_PX)
     return np.array(out)
 
 
@@ -188,6 +184,21 @@ def reid_tables(cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return catalogue, items_df, cands
 
 
+def check_reviewed_ids(con: sqlite3.Connection, table: str, reviews: str, new: pd.DataFrame) -> None:
+    """Reviews point at item ids; stop if a re-export would move a reviewed id to another crop."""
+    have = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if table not in have or reviews not in have:
+        return
+    old = dict(con.execute(f"SELECT id, crop_id FROM {table} WHERE id IN (SELECT item_id FROM {reviews})").fetchall())
+    now = dict(zip(new["id"], new["crop_id"].astype(str)))
+    moved = [i for i, c in old.items() if now.get(i) != c]
+    if moved:
+        raise SystemExit(
+            f"{len(moved)} reviewed {table} ids would point at different crops after this export "
+            f"(first: {moved[:5]}). Back up {reviews} and remap it by crop_id first."
+        )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default="configs/phase5.yaml")
@@ -205,6 +216,9 @@ def main() -> int:
     db = Path(cfg["db"])
     db.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(db)
+    species.insert(0, "id", np.arange(1, len(species) + 1))
+    check_reviewed_ids(con, "species_items", "species_reviews", species)
+    check_reviewed_ids(con, "reid_items", "reid_reviews", items)
     with con:
         con.executescript(SCHEMA)
         species.to_sql("species_items", con, if_exists="append", index=False)
