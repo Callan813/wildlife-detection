@@ -67,9 +67,9 @@ locations. Full numbers in [`reports/phase1/summary.md`](reports/phase1/summary.
 
 | Threshold (per trigger event) | Animal events kept | Empty events removed | Review workload removed |
 |---|---|---|---|
-| 0.01 (the lowest stored) | 96.5% (21 of 600 missed) | 28.0% | 15.8% |
-| 0.02 | 94.8% | 40.0% | 22.6% |
-| 0.06 | 90.2% | 65.0% | 37.4% |
+| 0.01 (the lowest stored) | 95.5% (27 of 600 missed) | 31.0% | 17.8% |
+| 0.02 | 93.5% | 44.5% | 25.5% |
+| 0.05 | 90.0% | 66.0% | 38.0% |
 
 Worst species group at 0.01: pangolin 87.8%, then rodent 92.7% and macaque 92.9%.
 Latency per image (GPU, RTX 3050 Laptop, batches of 16): 28 ms median, 40 ms p95,
@@ -78,9 +78,9 @@ including JPEG decode.
 ![trade-off](reports/phase1/tradeoff.png)
 
 **The short version: out of the box, MegaDetector doesn't filter this forest well.**
-The 98% recall target can't be reached at all. 21 animal events have no box above 0.01,
-and keeping 95% of animals still leaves 72% of empty events for a person to review.
-Things get better if you accept 90% recall, where it removes 65% of empty events.
+The 98% recall target can't be reached at all. 27 animal events have no box above 0.01,
+and keeping 95% of animals still leaves 69% of empty events for a person to review.
+Things get better if you accept 90% recall, where it removes 66% of empty events.
 
 **Why.** Looking at the highest-scoring "empty" events
 ([`false_alarms.jpg`](reports/phase1/false_alarms.jpg)) shows the same few culprits over
@@ -93,7 +93,7 @@ a person's legs or what looks like an animal at night. The missed animal events
 ([`missed_animals.jpg`](reports/phase1/missed_animals.jpg)) are a mix. At
 thumbnail size most look empty, but the pangolin bursts I checked at full size do
 have the animal in them: a dim shape the same colour as the leaf litter under IR.
-Pangolin is the worst group (5 of the 21 misses).
+Pangolin is the worst group (5 of the 27 misses).
 
 ### What I tried on top of the detector
 
@@ -103,13 +103,13 @@ Both are in [`src/ghats/filters.py`](src/ghats/filters.py) and compared in
 
 | Rule (at the lowest threshold, 0.01) | Animal events kept | Empty events removed |
 |---|---|---|
-| Max score (baseline) | 96.5% | 28.0% |
-| Burst agreement: 2 frames must see an animal | 94.0% | 35.2% |
-| Burst agreement: the same box in 2 frames | 84.7% | 37.8% |
-| Camera background: drop boxes where this camera fired in other events (IoU 0.5) | 95.0% | 29.3% |
+| Max score (baseline) | 95.5% | 31.0% |
+| Burst agreement: 2 frames must see an animal | 91.8% | 40.2% |
+| Burst agreement: the same box in 2 frames | 81.5% | 43.0% |
+| Camera background: drop boxes where this camera fired in other events (IoU 0.5) | 93.8% | 32.5% |
 
-Neither is better than just raising the threshold: at 94% recall the plain max score
-already removes about 40% of empty events, more than burst agreement's 35%. Burst agreement
+Neither is better than just raising the threshold: at 0.03 the plain max score keeps
+more animals (92.7%) and removes far more empty events (54%) than burst agreement's 40%. Burst agreement
 fails for three reasons: 26% of events are a single frame, animals often show up in
 only one frame of a burst, and leaves don't move, so they "agree" with themselves.
 Camera background could work on a real deployment, but this sample deliberately
@@ -146,15 +146,17 @@ Phase 2 trains a classifier on detector crops anyway, so it gets an extra
   The first fix only dropped boxes of exactly zero height. Strips that end a pixel
   or two inside the frame survived, and I only caught them when the reviewer
   dashboard drew a 1-pixel box along the top of a photo: 1,531 of 23,643 Phase 2
-  crops. Boxes with a side under 16 px are now dropped too (every animal box that
-  small was one of these strips).
+  crops. The detector now also drops boxes under 16 px thick that lie on the frame
+  edge (every animal box that thin was one of these strips; a tiny animal in the
+  open is kept). In Phase 1 this cost a point of recall at the lowest threshold
+  (96.5% → 95.5%): in 6 more animal events a strip had been the only "box".
 - **The detector runs in eval mode, in batches.** PyTorch-Wildlife 1.3's
   `single_image_detection()` for the MIT model reloads the checkpoint on every call
   and leaves the network in training mode, so BatchNorm normalises each image with
   its own statistics instead of the learned ones. `src/ghats/detector.py` loads the
   model once, calls `eval()`, and runs batches fed by a multi-process DataLoader.
   On the Phase 1 set this raised event-level AUC from 0.870 to 0.903 (both measured
-  before the padding fix below; 0.913 after it) and cut
+  before the padding fix below; 0.910 after it) and cut
   latency from 826 ms to 28 ms per image (median).
 - **MIT-licensed detector by default.** `MegaDetectorV6MIT` avoids the AGPL terms
   of the Ultralytics-based weights; the config can switch models for comparison.

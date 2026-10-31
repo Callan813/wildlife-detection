@@ -1,13 +1,15 @@
 import pandas as pd
 
-from ghats.crops import BACKGROUND, MIN_BOX_PX, box_side_px, crop_box, label_boxes, split_locations
+from ghats.crops import BACKGROUND, crop_box, is_padding_strip, label_boxes, split_locations
 
 
-def test_padding_strip_is_below_min_box_size():
+def test_padding_strip():
     # Real case: a full-width strip one pixel tall along the top of a 4608 x 2592 frame.
-    assert box_side_px([0.0002, 0.0, 0.9973, 0.0003], 4608, 2592) < MIN_BOX_PX
-    # A small animal far from the camera is still kept.
-    assert box_side_px([0.50, 0.50, 0.51, 0.52], 3840, 2880) >= MIN_BOX_PX
+    assert is_padding_strip([0.0002, 0.0, 0.9973, 0.0003], 4608, 2592)
+    assert is_padding_strip([0.0, 0.998, 1.0, 1.0], 3840, 2880)  # bottom edge
+    # Tiny animals are kept: in the open, and at the edge if the box isn't thin across it.
+    assert not is_padding_strip([0.50, 0.50, 0.503, 0.51], 3840, 2880)  # 12 x 29 px
+    assert not is_padding_strip([0.20, 0.0, 0.25, 0.02], 3840, 2880)  # 192 x 58 px at the top
 
 
 class TestCropBox:

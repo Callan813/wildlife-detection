@@ -28,7 +28,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from ghats.config import load_config
-from ghats.crops import BACKGROUND, MIN_BOX_PX, SPLITS, box_side_px, crop_box, label_boxes, split_locations
+from ghats.crops import BACKGROUND, SPLITS, crop_box, is_padding_strip, label_boxes, split_locations
 
 
 def load_animal_boxes(path: Path, max_per_image: int) -> pd.DataFrame:
@@ -96,9 +96,9 @@ def main() -> int:
     # within a frame, and renumbering would point real crops at a phantom's saved image.
     with ThreadPoolExecutor(args.threads) as pool:
         sizes = dict(zip(crops["local_path"].unique(), pool.map(frame_size, crops["local_path"].unique())))
-    side = [box_side_px(b, *sizes[p]) for b, p in zip(crops["bbox"], crops["local_path"])]
-    phantom = pd.Series(side, index=crops.index) < MIN_BOX_PX
-    print(f"dropped {phantom.sum():,} padding-phantom boxes (shorter side < {MIN_BOX_PX} px)")
+    strip = [is_padding_strip(b, *sizes[p]) for b, p in zip(crops["bbox"], crops["local_path"])]
+    phantom = pd.Series(strip, index=crops.index)
+    print(f"dropped {phantom.sum():,} padding-strip boxes")
     crops = crops[~phantom]
 
     out = Path(args.out)

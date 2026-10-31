@@ -1,22 +1,22 @@
 rule,target_recall,threshold,recall,empty_removed,meets_target
-Max score (baseline),0.98,0.01,0.965,0.28,False
-Max score (baseline),0.95,0.01,0.965,0.28,True
-Max score (baseline),0.9,0.06,0.9016666666666666,0.65,True
-Burst: 2 frames agree,0.98,0.01,0.94,0.3516666666666667,False
-Burst: 2 frames agree,0.95,0.01,0.94,0.3516666666666667,False
-Burst: 2 frames agree,0.9,0.01,0.94,0.3516666666666667,True
-Burst: 3 frames agree,0.98,0.01,0.9033333333333333,0.40166666666666667,False
-Burst: 3 frames agree,0.95,0.01,0.9033333333333333,0.40166666666666667,False
-Burst: 3 frames agree,0.9,0.01,0.9033333333333333,0.40166666666666667,True
-Burst: same box in 2 frames,0.98,0.01,0.8466666666666667,0.37833333333333335,False
-Burst: same box in 2 frames,0.95,0.01,0.8466666666666667,0.37833333333333335,False
-Burst: same box in 2 frames,0.9,0.01,0.8466666666666667,0.37833333333333335,False
-Burst: same box in 3 frames,0.98,0.01,0.755,0.44333333333333336,False
-Burst: same box in 3 frames,0.95,0.01,0.755,0.44333333333333336,False
-Burst: same box in 3 frames,0.9,0.01,0.755,0.44333333333333336,False
-Camera background (IoU 0.5),0.98,0.01,0.95,0.29333333333333333,False
-Camera background (IoU 0.5),0.95,0.01,0.95,0.29333333333333333,True
-Camera background (IoU 0.5),0.9,0.03,0.9133333333333333,0.535,True
-Camera background (IoU 0.7),0.98,0.01,0.955,0.285,False
-Camera background (IoU 0.7),0.95,0.01,0.955,0.285,True
-Camera background (IoU 0.7),0.9,0.04,0.9116666666666666,0.5883333333333334,True
+Max score (baseline),0.98,0.01,0.955,0.31,False
+Max score (baseline),0.95,0.01,0.955,0.31,True
+Max score (baseline),0.9,0.05,0.9,0.66,True
+Burst: 2 frames agree,0.98,0.01,0.9183333333333333,0.40166666666666667,False
+Burst: 2 frames agree,0.95,0.01,0.9183333333333333,0.40166666666666667,False
+Burst: 2 frames agree,0.9,0.01,0.9183333333333333,0.40166666666666667,True
+Burst: 3 frames agree,0.98,0.01,0.8783333333333333,0.4633333333333333,False
+Burst: 3 frames agree,0.95,0.01,0.8783333333333333,0.4633333333333333,False
+Burst: 3 frames agree,0.9,0.01,0.8783333333333333,0.4633333333333333,False
+Burst: same box in 2 frames,0.98,0.01,0.815,0.43,False
+Burst: same box in 2 frames,0.95,0.01,0.815,0.43,False
+Burst: same box in 2 frames,0.9,0.01,0.815,0.43,False
+Burst: same box in 3 frames,0.98,0.01,0.7233333333333334,0.505,False
+Burst: same box in 3 frames,0.95,0.01,0.7233333333333334,0.505,False
+Burst: same box in 3 frames,0.9,0.01,0.7233333333333334,0.505,False
+Camera background (IoU 0.5),0.98,0.01,0.9383333333333334,0.325,False
+Camera background (IoU 0.5),0.95,0.01,0.9383333333333334,0.325,False
+Camera background (IoU 0.5),0.9,0.02,0.9066666666666666,0.4716666666666667,True
+Camera background (IoU 0.7),0.98,0.01,0.945,0.315,False
+Camera background (IoU 0.7),0.95,0.01,0.945,0.315,False
+Camera background (IoU 0.7),0.9,0.04,0.9,0.6266666666666667,True

@@ -42,7 +42,7 @@ import numpy as np
 import pandas as pd
 
 from ghats.config import load_config
-from ghats.crops import MIN_BOX_PX, box_side_px
+from ghats.crops import is_padding_strip
 from ghats.review import audit_ranks, shortlists, species_uncertainty, split_catalogue
 
 SCHEMA = """
@@ -108,7 +108,7 @@ def species_rows(cfg: dict) -> pd.DataFrame:
 
 
 def phantom_boxes(frame_paths: pd.Series, boxes: pd.Series) -> np.ndarray:
-    """Padding phantoms (see ghats.crops.MIN_BOX_PX); crops made before 06 dropped them
+    """Padding strips (ghats.crops.is_padding_strip); crops made before 06 dropped them
     are still in older predictions."""
     from PIL import Image
 
@@ -118,7 +118,7 @@ def phantom_boxes(frame_paths: pd.Series, boxes: pd.Series) -> np.ndarray:
             out.append(False)
             continue
         with Image.open(f) as im:  # reads the header only
-            out.append(box_side_px(json.loads(b), *im.size) < MIN_BOX_PX)
+            out.append(is_padding_strip(json.loads(b), *im.size))
     return np.array(out)
 
 

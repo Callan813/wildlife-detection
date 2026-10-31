@@ -173,3 +173,12 @@ def test_padding_boxes_are_dropped():
     assert len(dets) == 1
     assert dets[0].conf == 0.9
     assert dets[0].bbox == [0.0625, 0.2222, 0.25, 0.5556]
+
+
+def test_padding_strips_just_inside_the_frame_are_dropped():
+    from ghats.detector import _to_detections
+
+    # A padding box that reaches 2 px into the frame survives clamping with a tiny area.
+    boxes = [[2, -60, 1596, 2], [700, 400, 712, 430]]  # strip, then a small real animal (12 x 30 px)
+    dets = _to_detections([0, 0], [0.15, 0.3], boxes, 1600, 900)
+    assert [d.conf for d in dets] == [0.3]

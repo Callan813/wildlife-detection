@@ -12,6 +12,8 @@ from typing import Any
 
 from PIL import Image
 
+from ghats.crops import is_padding_strip
+
 ANIMAL, PERSON, VEHICLE = 0, 1, 2
 _CLASS_NAMES = {ANIMAL: "animal", PERSON: "person", VEHICLE: "vehicle"}
 _SUPPORTED = ("MegaDetectorV6MIT", "MegaDetectorV6", "MegaDetectorV6Apache")
@@ -105,7 +107,8 @@ def _to_detections(classes: Any, confs: Any, boxes: Any, w: int, h: int) -> list
     # coordinates, sometimes slightly past the edge; normalise and clamp.
     # The model also fires on the letterbox padding above and below wide frames
     # (conf up to ~0.2, in almost every image). Those boxes lie wholly outside the
-    # image, clamp to zero-height strips on the border, and are dropped.
+    # image, clamp to zero-height strips on the border, and are dropped, along with the
+    # ones that end a pixel or two inside it.
     dets = [
         Detection(
             category=_CLASS_NAMES.get(int(c), str(int(c))),
@@ -114,4 +117,4 @@ def _to_detections(classes: Any, confs: Any, boxes: Any, w: int, h: int) -> list
         )
         for c, p, box in zip(classes, confs, boxes)
     ]
-    return [d for d in dets if has_area(d.bbox)]
+    return [d for d in dets if has_area(d.bbox) and not is_padding_strip(d.bbox, w, h)]

@@ -21,11 +21,10 @@ import pandas as pd
 
 BACKGROUND = "background"
 SPLITS = ("train", "val", "test")
-# Shorter box side, in frame pixels, below which a box is a letterbox-padding phantom.
-# has_area() drops the boxes that clamp to zero height, but ones that end a pixel or two
-# inside the frame survive: full-width strips along the top or bottom edge, conf <= 0.17.
-# In the Phase 2 detections every animal box under 16 px is one of those; nothing that
-# small could be classified anyway.
+# A box this thin (frame pixels) lying on the frame edge is a letterbox-padding phantom.
+# Boxes on the padding clamp to zero-height strips, but ones that end a pixel or two inside
+# the frame survive as full-width strips along the top or bottom edge, conf <= 0.17. In the
+# Phase 2 detections every animal box under 16 px is one of those.
 MIN_BOX_PX = 16
 
 
@@ -44,9 +43,14 @@ def crop_box(bbox: Sequence[float], w: int, h: int, pad: float = 0.1, min_side: 
     return left, top, max(right, left + 1), max(bottom, top + 1)
 
 
-def box_side_px(bbox: Sequence[float], w: int, h: int) -> float:
-    """Shorter side of a normalised [x1, y1, x2, y2] box, in pixels of a w x h frame."""
-    return min((bbox[2] - bbox[0]) * w, (bbox[3] - bbox[1]) * h)
+def is_padding_strip(bbox: Sequence[float], w: int, h: int) -> bool:
+    """Normalised [x1, y1, x2, y2] box thinner than MIN_BOX_PX and touching the frame edge
+    across that thin side (top/bottom for wide frames, left/right for tall ones). A tiny
+    animal in the open is kept."""
+    x1, y1, x2, y2 = bbox
+    flat = (y2 - y1) * h < MIN_BOX_PX and (y1 <= 0.0 or y2 >= 1.0)
+    narrow = (x2 - x1) * w < MIN_BOX_PX and (x1 <= 0.0 or x2 >= 1.0)
+    return flat or narrow
 
 
 def label_boxes(boxes: pd.DataFrame, min_conf: float, train_min_conf: float) -> pd.DataFrame:
