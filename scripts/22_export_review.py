@@ -7,6 +7,12 @@ their outputs and records decisions. This script builds outputs/phase5/review.db
 
   species_items    one row per test crop: predicted group, probabilities, margin, and the
                    full frame + box (a small crop alone is often too little to judge)
+                   Crops whose box is a padding phantom (a strip a few pixels tall along the
+                   frame edge, see the Phase 1 padding-box bug) are kept, so item ids stay
+                   stable, but flagged: the dashboard leaves them out of queue and stats.
+  species_frames   every frame of the trigger bursts those crops come from, so a reviewer
+                   can look at the shots just before and after (the animal often turns
+                   or steps into the open)
   reid_catalogue   crops of the leopards already known when review starts
   reid_items       crops to review: best similarity, margin, "new leopard" suggestion
   reid_candidates  top-k catalogued leopards per item, with the best-matching photo
@@ -40,15 +46,22 @@ from ghats.review import audit_ranks, shortlists, species_uncertainty, split_cat
 
 SCHEMA = """
 DROP TABLE IF EXISTS species_items;
+DROP TABLE IF EXISTS species_frames;
 DROP TABLE IF EXISTS reid_catalogue;
 DROP TABLE IF EXISTS reid_items;
 DROP TABLE IF EXISTS reid_candidates;
 DROP TABLE IF EXISTS meta;
 CREATE TABLE species_items (
-  id INTEGER PRIMARY KEY, crop_id TEXT UNIQUE NOT NULL, seq_key TEXT, location TEXT,
+  id INTEGER PRIMARY KEY, crop_id TEXT UNIQUE NOT NULL, image_id TEXT, seq_key TEXT, location TEXT,
   detector_conf REAL, pred TEXT NOT NULL, pred_prob REAL NOT NULL, margin REAL NOT NULL,
-  probs TEXT NOT NULL, true_label TEXT, frame_path TEXT, bbox TEXT, captured_at TEXT, audit_rank INTEGER
+  probs TEXT NOT NULL, true_label TEXT, frame_path TEXT, bbox TEXT, captured_at TEXT, audit_rank INTEGER,
+  phantom INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE species_frames (
+  id INTEGER PRIMARY KEY, image_id TEXT UNIQUE NOT NULL, seq_key TEXT NOT NULL, frame_num INTEGER NOT NULL,
+  captured_at TEXT, frame_path TEXT NOT NULL
+);
+CREATE INDEX species_frames_seq ON species_frames(seq_key, frame_num);
 CREATE TABLE reid_catalogue (
   crop_id TEXT PRIMARY KEY, leopard TEXT NOT NULL, viewpoint TEXT NOT NULL, encounter TEXT NOT NULL
 );
@@ -77,6 +90,7 @@ def species_rows(cfg: dict) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "crop_id": p["crop_id"],
+            "image_id": p["image_id"],
             "seq_key": p["seq_key"],
             "location": p["location"],
             "detector_conf": p["conf"],
@@ -88,6 +102,41 @@ def species_rows(cfg: dict) -> pd.DataFrame:
             "frame_path": [Path(f).as_posix() if isinstance(f, str) else None for f in frame["local_path"]],
             "bbox": p["crop_id"].map(boxes).to_numpy(),
             "captured_at": frame["datetime"].to_numpy(),
+        }
+    )
+
+
+# Shorter box side in frame pixels below which a box is a padding phantom. The phantoms in the
+# Phase 2 test crops are all under 4 px; the smallest real box is far above 16.
+PHANTOM_PX = 8
+
+
+def phantom_boxes(frame_paths: pd.Series, boxes: pd.Series) -> np.ndarray:
+    from PIL import Image
+
+    out = []
+    for f, b in zip(frame_paths, boxes):
+        if not isinstance(f, str) or not isinstance(b, str):
+            out.append(False)
+            continue
+        x1, y1, x2, y2 = json.loads(b)
+        with Image.open(f) as im:  # reads the header only
+            w, h = im.size
+        out.append(min((x2 - x1) * w, (y2 - y1) * h) < PHANTOM_PX)
+    return np.array(out)
+
+
+def species_frames(cfg: dict, seq_keys: pd.Series) -> pd.DataFrame:
+    cols = ["image_id", "seq_key", "frame_num", "datetime", "local_path"]
+    m = pd.read_csv(cfg["manifest"], usecols=cols, dtype={"image_id": str})
+    m = m[m["seq_key"].isin(set(seq_keys))].sort_values(["seq_key", "frame_num", "datetime"])
+    return pd.DataFrame(
+        {
+            "image_id": m["image_id"],
+            "seq_key": m["seq_key"],
+            "frame_num": m["frame_num"],
+            "captured_at": m["datetime"],
+            "frame_path": [Path(f).as_posix() for f in m["local_path"]],
         }
     )
 
@@ -146,6 +195,8 @@ def main() -> int:
 
     cfg = load_config(args.config)
     species = species_rows(cfg["species"])
+    species["phantom"] = phantom_boxes(species["frame_path"], species["bbox"]).astype(int)
+    frames = species_frames(cfg["species"], species["seq_key"])
     catalogue, items, cands = reid_tables(cfg["reid"])
     rng = np.random.default_rng(cfg["audit_seed"])
     species["audit_rank"] = pd.array(audit_ranks(len(species), cfg["audit_frac"], rng), dtype="Int64")
@@ -157,6 +208,7 @@ def main() -> int:
     with con:
         con.executescript(SCHEMA)
         species.to_sql("species_items", con, if_exists="append", index=False)
+        frames.to_sql("species_frames", con, if_exists="append", index=False)
         catalogue.to_sql("reid_catalogue", con, if_exists="append", index=False)
         items.to_sql("reid_items", con, if_exists="append", index=False)
         cands.to_sql("reid_candidates", con, if_exists="append", index=False)
@@ -175,7 +227,9 @@ def main() -> int:
     top1 = cands[cands["rank"] == 1].set_index("item_id")["leopard"]
     known = items[items["truth_is_new"] == 0]
     print(
-        f"species: {len(species):,} crops, model accuracy {sp_acc:.1%}, frames found {species['frame_path'].notna().mean():.0%}"
+        f"species: {len(species):,} crops, model accuracy {sp_acc:.1%}, frames found {species['frame_path'].notna().mean():.0%}, "
+        f"{species['phantom'].sum()} padding phantoms flagged, "
+        f"{len(frames):,} burst frames"
     )
     print(
         f"re-id: catalogue {len(catalogue)} crops of {catalogue['leopard'].nunique()} leopards; "

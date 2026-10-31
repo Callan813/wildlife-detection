@@ -9,9 +9,12 @@ import { openDb } from "../src/db.js";
 
 // Same tables as scripts/22_export_review.py writes, with a handful of rows.
 const EXPORT_SCHEMA = `
-CREATE TABLE species_items (id INTEGER PRIMARY KEY, crop_id TEXT UNIQUE NOT NULL, seq_key TEXT, location TEXT,
-  detector_conf REAL, pred TEXT NOT NULL, pred_prob REAL NOT NULL, margin REAL NOT NULL, probs TEXT NOT NULL,
-  true_label TEXT, frame_path TEXT, bbox TEXT, captured_at TEXT, audit_rank INTEGER);
+CREATE TABLE species_items (id INTEGER PRIMARY KEY, crop_id TEXT UNIQUE NOT NULL, image_id TEXT, seq_key TEXT,
+  location TEXT, detector_conf REAL, pred TEXT NOT NULL, pred_prob REAL NOT NULL, margin REAL NOT NULL,
+  probs TEXT NOT NULL, true_label TEXT, frame_path TEXT, bbox TEXT, captured_at TEXT, audit_rank INTEGER,
+  phantom INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE species_frames (id INTEGER PRIMARY KEY, image_id TEXT UNIQUE NOT NULL, seq_key TEXT NOT NULL,
+  frame_num INTEGER NOT NULL, captured_at TEXT, frame_path TEXT NOT NULL);
 CREATE TABLE reid_catalogue (crop_id TEXT PRIMARY KEY, leopard TEXT NOT NULL, viewpoint TEXT NOT NULL,
   encounter TEXT NOT NULL);
 CREATE TABLE reid_items (id INTEGER PRIMARY KEY, crop_id TEXT UNIQUE NOT NULL, viewpoint TEXT NOT NULL,
@@ -22,10 +25,18 @@ CREATE TABLE reid_candidates (item_id INTEGER NOT NULL, rank INTEGER NOT NULL, l
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 INSERT INTO meta VALUES ('new_threshold', '0.5'), ('species_images', 'img/species'), ('reid_images', 'img/reid');
 INSERT INTO species_items VALUES
-  (1, 'sure', 's1', 'loc1', 0.9, 'civet', 0.9, 0.85, '{"civet":0.9,"sambar":0.05,"macaque":0.05}', 'civet',
-   'data/frames/f1.jpg', '[0.1, 0.2, 0.3, 0.4]', '2017-06-30 03:07:20', 1),
-  (2, 'unsure', 's2', 'loc1', 0.5, 'sambar', 0.45, 0.05, '{"civet":0.1,"sambar":0.45,"macaque":0.4}', 'macaque',
-   '../secret.txt', NULL, NULL, NULL);
+  (1, 'sure', 'f1', 's1', 'loc1', 0.9, 'civet', 0.9, 0.85, '{"civet":0.9,"sambar":0.05,"macaque":0.05}', 'civet',
+   'data/frames/f1.jpg', '[0.1, 0.2, 0.3, 0.4]', '2017-06-30 03:07:20', 1, 0),
+  (2, 'unsure', 'g1', 's2', 'loc1', 0.5, 'sambar', 0.45, 0.05, '{"civet":0.1,"sambar":0.45,"macaque":0.4}', 'macaque',
+   '../secret.txt', NULL, NULL, NULL, 0),
+  (3, 'strip', 'h1', 's3', 'loc1', 0.05, 'civet', 0.4, 0.01, '{"civet":0.4,"sambar":0.39,"macaque":0.21}', 'civet',
+   'data/frames/f1.jpg', '[0.0, 0.0, 0.99, 0.0003]', NULL, NULL, 1);
+-- Burst s1 has five frames (stored out of order); the item is the middle one. s2's frame
+-- has no row here, as if the manifest lost it.
+INSERT INTO species_frames VALUES
+  (10, 'f3', 's1', 3, NULL, 'data/frames/f3.jpg'), (11, 'f0', 's1', 0, NULL, 'data/frames/f0.jpg'),
+  (12, 'f1', 's1', 1, '2017-06-30 03:07:20', 'data/frames/f1.jpg'), (13, 'f2', 's1', 2, NULL, 'data/frames/f2.jpg'),
+  (14, 'f4', 's1', 4, NULL, 'data/frames/f4.jpg'), (15, 'x', 's9', 0, NULL, '../secret.txt');
 INSERT INTO reid_catalogue VALUES ('c1', 'L1', 'left', 'e1'), ('c2', 'L2', 'left', 'e2');
 INSERT INTO reid_items VALUES
   (1, 'q1', 'left', 'e3', 0.8, 0.3, 0, 'L1', 0, 1),
@@ -50,7 +61,7 @@ beforeEach(() => {
   fs.writeFileSync(path.join(root, "img/species/sure.jpg"), "jpeg bytes");
   fs.writeFileSync(path.join(root, "secret.txt"), "not an image");
   fs.mkdirSync(path.join(root, "data/frames"), { recursive: true });
-  fs.writeFileSync(path.join(root, "data/frames/f1.jpg"), "frame bytes");
+  for (const f of ["f0", "f1", "f2", "f3", "f4"]) fs.writeFileSync(path.join(root, `data/frames/${f}.jpg`), "frame bytes");
   db = openDb(file);
   app = createApp({ db, repoRoot: root });
 });
@@ -61,6 +72,15 @@ afterEach(() => {
 });
 
 describe("species", () => {
+  it("leaves padding phantoms out of the queue and stats", async () => {
+    // Item 3 is the least certain of all, but its box is a 1-px strip along the frame edge.
+    const q = await request(app).get("/api/species/queue").expect(200);
+    expect(q.body.map((i: { id: number }) => i.id)).not.toContain(3);
+    await request(app).post("/api/species/3/review").send({ label: "civet" }).expect(201); // made before the flag
+    const s = (await request(app).get("/api/stats").expect(200)).body.species;
+    expect(s).toMatchObject({ total: 2, reviewed: 0 });
+  });
+
   it("queues the least certain crop first and hides reviewed ones", async () => {
     const q = await request(app).get("/api/species/queue").expect(200);
     expect(q.body.map((i: { crop_id: string }) => i.crop_id)).toEqual(["unsure", "sure"]);
@@ -70,6 +90,26 @@ describe("species", () => {
     await request(app).post("/api/species/2/review").send({ label: "macaque" }).expect(201);
     const after = await request(app).get("/api/species/queue").expect(200);
     expect(after.body.map((i: { crop_id: string }) => i.crop_id)).toEqual(["sure"]);
+  });
+
+  it("returns the frames around the boxed one, in burst order", async () => {
+    const q = await request(app).get("/api/species/queue").expect(200);
+    const sure = q.body.find((i: { id: number }) => i.id === 1);
+    expect(sure.burst_size).toBe(5);
+    expect(sure.burst.map((f: { frame_num: number }) => f.frame_num)).toEqual([0, 1, 2, 3, 4]);
+    expect(sure.burst[1]).toMatchObject({ current: true, url: "/images/frame/1" });
+    expect(sure.burst[0]).toMatchObject({ current: false, url: "/images/burst/11" });
+    const lost = q.body.find((i: { id: number }) => i.id === 2);
+    expect(lost).toMatchObject({ burst: [], burst_size: 0 });
+  });
+
+  it("takes 'unsure' as a review but leaves it out of the accuracy numbers", async () => {
+    await request(app).post("/api/species/1/review").send({ label: "unsure" }).expect(201);
+    const q = await request(app).get("/api/species/queue").expect(200);
+    expect(q.body.map((i: { id: number }) => i.id)).toEqual([2]);
+    const s = (await request(app).get("/api/stats").expect(200)).body.species;
+    expect(s).toMatchObject({ reviewed: 1, unsure: 1, audit_reviewed: 0, model_accuracy: null });
+    expect(s.reviewer_agrees_with_dataset).toBeNull();
   });
 
   it("rejects unknown labels and items", async () => {
@@ -136,5 +176,11 @@ describe("images", () => {
     await request(app).get("/images/frame/1").expect(200);
     await request(app).get("/images/frame/2").expect(404); // path points outside data/
     await request(app).get("/images/frame/99").expect(404);
+  });
+
+  it("serves burst frames by frame id, only from the data folder", async () => {
+    await request(app).get("/images/burst/11").expect(200);
+    await request(app).get("/images/burst/15").expect(404); // path points outside data/
+    await request(app).get("/images/burst/99").expect(404);
   });
 });

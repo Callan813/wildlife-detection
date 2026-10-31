@@ -13,6 +13,15 @@ export interface SpeciesItem {
   pred_prob: number;
   margin: number;
   top: { label: string; p: number }[];
+  burst: BurstFrame[]; // up to 3 frames either side of this one, in order; empty if unknown
+  burst_size: number; // frames in the whole trigger burst
+}
+
+export interface BurstFrame {
+  frame_num: number;
+  captured_at: string | null;
+  url: string;
+  current: boolean; // the frame the box was drawn on
 }
 
 export interface ReidSummary {
@@ -49,6 +58,7 @@ export interface Stats {
     total: number;
     reviewed: number;
     audit_reviewed: number;
+    unsure: number;
     model_accuracy: number | null;
     model_agrees_on_hardest: number | null;
     reviewer_agrees_with_dataset: number | null;

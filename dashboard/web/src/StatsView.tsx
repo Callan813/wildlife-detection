@@ -28,6 +28,8 @@ export function StatsView() {
           <dd>{pct(s.model_agrees_on_hardest)}</dd>
           <dt>Reviewers agree with dataset labels</dt>
           <dd>{pct(s.reviewer_agrees_with_dataset)}</dd>
+          <dt>Marked not sure</dt>
+          <dd>{s.unsure}</dd>
         </dl>
       </div>
 

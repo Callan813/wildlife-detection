@@ -3,7 +3,7 @@
 //   GET  /api/meta                    model names, threshold, export time
 //   GET  /api/species/queue           unreviewed crops, least certain first, audit items mixed in
 //   GET  /api/species/classes         the species groups a reviewer can pick
-//   POST /api/species/:id/review      { label, reviewer? }
+//   POST /api/species/:id/review      { label (a group, or "unsure"), reviewer? }
 //   GET  /api/reid/queue              unreviewed leopard photos, least certain first, audit items mixed in
 //   GET  /api/reid/items/:id          one photo with its top-k shortlist
 //   GET  /api/reid/leopards           catalogue, for picking a leopard not on the shortlist
@@ -11,6 +11,7 @@
 //   GET  /api/stats                   progress, model vs reviewers, recalibrated threshold
 //   GET  /images/:kind/:cropId        crop image (kind = species | reid)
 //   GET  /images/frame/:id            full camera frame for species item :id
+//   GET  /images/burst/:frameId       another frame of the same trigger burst (ids from the queue)
 
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -27,6 +28,9 @@ export interface AppOptions {
 
 const limitQuery = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20) });
 const idParam = z.object({ id: z.coerce.number().int().positive() });
+// Frames shown on each side of the boxed one; bursts run up to ~100 frames.
+const BURST_SIDE = 3;
+const UNSURE = "unsure";
 const reviewer = z.string().trim().min(1).max(64).default("anonymous");
 const speciesReview = z.object({ label: z.string().min(1), reviewer });
 const reidReview = z
@@ -56,6 +60,24 @@ export function createApp({ db, repoRoot }: AppOptions) {
     JSON.parse((db.prepare("SELECT probs FROM species_items LIMIT 1").get() as { probs: string }).probs),
   );
   const startThreshold = Number(m.new_threshold);
+  const burstFrames = db.prepare(
+    "SELECT id, image_id, frame_num, captured_at FROM species_frames WHERE seq_key = ? ORDER BY frame_num, id",
+  );
+  const burst = (r: SpeciesRow) => {
+    const all = (r.seq_key ? burstFrames.all(r.seq_key) : []) as unknown as BurstRow[];
+    const at = all.findIndex((f) => f.image_id === r.image_id);
+    if (at < 0) return { burst: [], burst_size: all.length };
+    return {
+      burst: all.slice(Math.max(0, at - BURST_SIDE), at + BURST_SIDE + 1).map((f) => ({
+        frame_num: f.frame_num,
+        captured_at: f.captured_at,
+        // The boxed frame keeps its own url so the browser reuses the image it already has.
+        url: f.image_id === r.image_id ? `/images/frame/${r.id}` : `/images/burst/${f.id}`,
+        current: f.image_id === r.image_id,
+      })),
+      burst_size: all.length,
+    };
+  };
 
   app.get("/api/meta", (_req, res) => {
     res.json({ ...m, new_threshold: startThreshold });
@@ -66,21 +88,21 @@ export function createApp({ db, repoRoot }: AppOptions) {
 
   app.get("/api/species/queue", (req, res) => {
     const { limit } = limitQuery.parse(req.query);
-    const select = `SELECT id, crop_id, location, detector_conf, pred, pred_prob, margin, probs, bbox, captured_at
-      FROM species_items WHERE id NOT IN (SELECT item_id FROM species_reviews)`;
+    const select = `SELECT id, crop_id, image_id, seq_key, location, detector_conf, pred, pred_prob, margin, probs, bbox, captured_at
+      FROM species_items WHERE phantom = 0 AND id NOT IN (SELECT item_id FROM species_reviews)`;
     const uncertain = db
       .prepare(`${select} AND audit_rank IS NULL ORDER BY margin, id LIMIT ?`)
       .all(limit) as unknown as SpeciesRow[];
     const audit = db
       .prepare(`${select} AND audit_rank IS NOT NULL ORDER BY audit_rank LIMIT ?`)
       .all(limit) as unknown as SpeciesRow[];
-    res.json(interleave(uncertain, audit, limit).map(speciesItem));
+    res.json(interleave(uncertain, audit, limit).map((r) => ({ ...speciesItem(r), ...burst(r) })));
   });
 
   app.post("/api/species/:id/review", (req, res) => {
     const { id } = idParam.parse(req.params);
     const body = speciesReview.parse(req.body);
-    if (!classes.includes(body.label)) throw new HttpError(400, `unknown label ${body.label}`);
+    if (body.label !== UNSURE && !classes.includes(body.label)) throw new HttpError(400, `unknown label ${body.label}`);
     if (!db.prepare("SELECT 1 FROM species_items WHERE id = ?").get(id)) throw new HttpError(404, "no such item");
     db.prepare("INSERT INTO species_reviews (item_id, label, reviewer) VALUES (?, ?, ?)").run(
       id,
@@ -167,12 +189,23 @@ export function createApp({ db, repoRoot }: AppOptions) {
     const row = db.prepare("SELECT frame_path FROM species_items WHERE id = ?").get(id) as
       | { frame_path: string | null }
       | undefined;
-    if (!row?.frame_path) throw new HttpError(404, "no frame for this item");
-    // The path comes from the export, but still refuse anything outside the repo's data folder.
-    const file = path.resolve(repoRoot, row.frame_path);
-    if (!file.startsWith(path.resolve(repoRoot, "data") + path.sep)) throw new HttpError(404, "no frame for this item");
-    res.sendFile(file, { maxAge: "1d" });
+    sendFrame(res, row?.frame_path);
   });
+
+  app.get("/images/burst/:id", (req, res) => {
+    const { id } = idParam.parse(req.params);
+    const row = db.prepare("SELECT frame_path FROM species_frames WHERE id = ?").get(id) as
+      | { frame_path: string }
+      | undefined;
+    sendFrame(res, row?.frame_path);
+  });
+
+  // The path comes from the export, but still refuse anything outside the repo's data folder.
+  function sendFrame(res: Response, framePath: string | null | undefined) {
+    const file = framePath ? path.resolve(repoRoot, framePath) : "";
+    if (!file.startsWith(path.resolve(repoRoot, "data") + path.sep)) throw new HttpError(404, "no such frame");
+    res.sendFile(file, { maxAge: "1d" });
+  }
 
   app.get("/images/:kind/:cropId", (req, res) => {
     const { kind, cropId } = req.params;
@@ -204,6 +237,8 @@ export function createApp({ db, repoRoot }: AppOptions) {
 interface SpeciesRow {
   id: number;
   crop_id: string;
+  image_id: string | null;
+  seq_key: string | null;
   location: string;
   detector_conf: number;
   pred: string;
@@ -235,6 +270,13 @@ function speciesItem(r: SpeciesRow) {
   };
 }
 
+interface BurstRow {
+  id: number;
+  image_id: string;
+  frame_num: number;
+  captured_at: string | null;
+}
+
 interface ReidRow {
   id: number;
   crop_id: string;
@@ -264,7 +306,7 @@ function stats(db: DatabaseSync, startThreshold: number) {
     .prepare(
       `SELECT s.pred, s.true_label, s.audit_rank IS NOT NULL AS audit, r.label
        FROM species_reviews r JOIN species_items s ON s.id = r.item_id
-       WHERE r.id IN (SELECT MAX(id) FROM species_reviews GROUP BY item_id)`,
+       WHERE s.phantom = 0 AND r.id IN (SELECT MAX(id) FROM species_reviews GROUP BY item_id)`,
     )
     .all() as { pred: string; true_label: string; audit: number; label: string }[];
   const rr = db
@@ -288,8 +330,10 @@ function stats(db: DatabaseSync, startThreshold: number) {
 
   // Model quality is measured on the random audit sample only; the uncertain-first items
   // are the model's hardest cases by construction.
-  const spAudit = sp.filter((r) => r.audit);
-  const spHard = sp.filter((r) => !r.audit);
+  // "Unsure" counts as reviewed (it leaves the queue) but not as a label to score against.
+  const spDecided = sp.filter((r) => r.label !== UNSURE);
+  const spAudit = spDecided.filter((r) => r.audit);
+  const spHard = spDecided.filter((r) => !r.audit);
   const decided = rr.filter((r) => r.decision !== "unsure");
   const rrAudit = decided.filter((r) => r.audit);
   const auditMatches = rrAudit.filter((r) => r.decision === "match");
@@ -299,13 +343,17 @@ function stats(db: DatabaseSync, startThreshold: number) {
 
   return {
     species: {
-      total: count("SELECT COUNT(*) AS n FROM species_items"),
+      total: count("SELECT COUNT(*) AS n FROM species_items WHERE phantom = 0"),
       reviewed: sp.length,
       audit_reviewed: spAudit.length,
+      unsure: sp.length - spDecided.length,
       model_accuracy: share(spAudit.filter((r) => r.pred === r.label).length, spAudit.length),
       model_agrees_on_hardest: share(spHard.filter((r) => r.pred === r.label).length, spHard.length),
       // Simulation only: the export keeps the dataset's labels to check reviewers against.
-      reviewer_agrees_with_dataset: share(sp.filter((r) => r.label === r.true_label).length, sp.length),
+      reviewer_agrees_with_dataset: share(
+        spDecided.filter((r) => r.label === r.true_label).length,
+        spDecided.length,
+      ),
     },
     reid: {
       total: count("SELECT COUNT(*) AS n FROM reid_items"),
