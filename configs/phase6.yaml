@@ -1,0 +1,35 @@
+# Phase 6: running on the camera
+#
+# scripts/26_live.py runs these models frame by frame on a folder, a video or a webcam,
+# with numpy + onnxruntime only (the same code a Raspberry Pi would run).
+
+models:
+  dir: outputs/phase6/onnx                         # from scripts/23_export_onnx.py and 24_quantize.py
+  detector: detector_{variant}.onnx
+  # The species model stays FP32 in both variants: SpeciesNet's EfficientNetV2 doesn't survive
+  # post-training INT8 (see scripts/24_quantize.py). It only runs on frames with an animal box.
+  species: species_fp32.onnx
+  head: outputs/phase2/speciesnet_probe/head.npz   # the Phase 2 probe, written by 11_speciesnet_probe.py
+
+live:
+  # The detector's precision. FP32 by default: on 1,200 Phase 1 events INT8 removed 58.5% of
+  # empty events at 90% recall against 66.2% for FP32, and on this x86 laptop it was slower
+  # (278 vs 187 ms, 4 threads; reports/phase6/benchmark_*). ARM CPUs with dot-product
+  # instructions (Pi 5) may run INT8 faster: run
+  # scripts/28_benchmark.py on the device before switching.
+  variant: fp32
+  threads: 4              # a Raspberry Pi 5 has 4 cores
+  min_conf: 0.02          # detector floor, as for the Phase 2 crops
+  max_boxes: 5            # per frame, as for the Phase 2 crops
+  # Keep an event when its best box has P(not background) at or above this. Phase 2's
+  # "probe, best box" operating point at the 90% target, picked on val cameras
+  # (reports/phase2/event_eval.csv): 91% of animal events kept, 74% of empty ones dropped
+  # on unseen test cameras. Recalibrate at a new site.
+  keep_threshold: 0.273
+  gap: 10                 # seconds without a frame that end a trigger event (camera-trap bursts)
+  video_fps: 2            # frames per second sampled from a video or webcam
+  video_gap: 3            # seconds without an animal frame that end an event in a video
+  crop:                   # what a camera would send for a kept event: the best box, padded
+    pad: 0.1
+    max_side: 384
+    jpeg_quality: 90

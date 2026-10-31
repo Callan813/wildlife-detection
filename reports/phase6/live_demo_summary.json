@@ -1,0 +1,22 @@
+{
+  "source": "data/demo/swg_test",
+  "variant": "fp32",
+  "threads": 4,
+  "keep_threshold": 0.273,
+  "frames": 49,
+  "frame_bytes": 76386078,
+  "events": 12,
+  "kept": 8,
+  "crop_bytes": 248149,
+  "meta_bytes": 3359,
+  "seconds": 40.2,
+  "ms_per_frame": {
+    "detector": 387.0,
+    "species": 345.5
+  },
+  "ms_per_frame_p95": {
+    "detector": 418.1,
+    "species": 1058.8
+  },
+  "sent_vs_all_frames": 0.0033
+}

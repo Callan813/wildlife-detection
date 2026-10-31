@@ -12,7 +12,8 @@ India model is built the same way (frozen SpeciesNet + linear head), just on Ind
 
 Features are cached in <out>/features.npz, so changing the head does not rerun the network.
 The regularisation C is picked on val macro F1, like the epoch in 07_train_classifier.py.
-Writes <out>/predictions.csv (same columns as our classifier's) and
+Writes <out>/predictions.csv (same columns as our classifier's), <out>/head.npz (scaler +
+logistic regression as plain arrays, so a camera can apply the head with numpy alone) and
 reports/phase2/classifier_{summary,test}_probe.*.
 """
 
@@ -113,6 +114,15 @@ def main() -> int:
     pred["pred_prob"] = probs.max(1)
     pred = pd.concat([pred, pd.DataFrame(probs, columns=[f"p_{g}" for g in groups])], axis=1)
     pred[pred["split"] != "train"].to_csv(out / "predictions.csv", index=False)
+    np.savez(
+        out / "head.npz",
+        mean=scaler.mean_,
+        scale=scaler.scale_,
+        coef=clf.coef_,
+        intercept=clf.intercept_,
+        classes=np.array(groups),
+        c=c,
+    )
 
     rep = per_class_report(y[te], probs[te].argmax(1), groups)
     reports = Path(args.reports)

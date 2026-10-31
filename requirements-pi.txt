@@ -1,0 +1,11 @@
+# What a camera (Raspberry Pi 5 or similar, 64-bit OS) needs to run scripts/26_live.py and
+# scripts/28_benchmark.py. Install the package itself without its laptop dependencies:
+#   pip install -r requirements-pi.txt && pip install --no-deps -e .
+# and copy outputs/phase6/onnx/{detector_fp32,species_fp32}.onnx plus
+# outputs/phase2/speciesnet_probe/head.npz to the same paths on the device.
+numpy
+pillow
+pyyaml
+onnxruntime
+opencv-python-headless  # only for video files and USB/CSI cameras; still images don't need it
+psutil                  # optional: memory numbers in the benchmark

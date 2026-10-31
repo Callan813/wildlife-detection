@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import random
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
-import pandas as pd
+if TYPE_CHECKING:  # pandas only at runtime where needed: the detector (and so a camera) imports this module
+    import pandas as pd
 
 BACKGROUND = "background"
 SPLITS = ("train", "val", "test")
@@ -108,6 +110,8 @@ def split_locations(
 
 def _coverage(counts: pd.DataFrame, assign: dict[str, str], val_frac: float, test_frac: float) -> float:
     """Worst ratio (actual share / target share) over every label in val and test, capped at 1."""
+    import pandas as pd
+
     split_of = pd.Series(assign).reindex(counts.columns)
     worst = 1.0
     for split, frac in (("val", val_frac), ("test", test_frac)):

@@ -1,6 +1,6 @@
 # Phase 2: frozen SpeciesNet features + logistic regression
 
-Head trained on 9,715 train-camera crops, C=0.01 picked on val (val macro F1 0.924).
+Head trained on 9,715 train-camera crops, C=0.01 picked on val (val macro F1 0.925).
 Test: 2,338 crops from 106 cameras never seen in training.
 
 **Test macro F1 0.886**, accuracy 0.923.

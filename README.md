@@ -19,7 +19,7 @@ what needs a human decision.
 | 3 | Leopard re-identification (metric learning + travel-feasibility prior) | **Done**; travel prior tested on a second dataset (LeopardID102) |
 | 4 | Natural-language search over detections (BioCLIP/CLIP + vector DB) | Planned |
 | 5 | Reviewer dashboard with an active-learning loop | **Done**: review + audit sample + threshold re-tuning; retraining from reviews not yet |
-| 6 | Edge deployment: ONNX/INT8 on Raspberry Pi 5 or Jetson, cascade design, benchmarks | Planned |
+| 6 | Edge deployment: ONNX/INT8 camera pipeline (photos, video, webcam), cascade design, bandwidth, benchmarks | **Done** on a laptop CPU standing in for a Pi; no Pi/Jetson numbers yet |
 
 ## Phase 1: detection and empty-frame filtering
 
@@ -665,6 +665,163 @@ reports the re-tuned one.
 - **Distance-sorted shortlist.** The travel prior isn't in the UI, because Leopard ID
   2022 has no camera positions.
 
+## Phase 6: running on the camera
+
+The point of all this is a camera trap that does the first pass itself: run the detector
+and the species model on the device, throw away empty triggers, and send a small crop and
+a line of text instead of every photo. I don't have a Raspberry Pi or Jetson, so this phase
+builds and measures everything on my laptop's CPU, limited to 4 threads like a Pi 5, and
+keeps the camera code to numpy, Pillow and ONNX Runtime so it runs on a Pi unchanged.
+**None of the speed numbers below are Pi numbers.**
+
+### Run it
+
+```bash
+pip install -e ".[edge]"
+python scripts/23_export_onnx.py        # PyTorch -> ONNX, checked against PyTorch outputs
+python scripts/24_quantize.py           # INT8 versions (only re-ID is worth it, see below)
+python scripts/26_live.py --source path/to/photos/     # or clip.mp4, or 0 for a webcam (--show for a window)
+python scripts/27_bandwidth.py          # data sent, Phase 2 test set
+python scripts/28_benchmark.py          # speed and memory per model
+python scripts/25_edge_eval.py --models detector species --variants fp32 int8   # accuracy, ~2 h on 4 threads
+```
+
+On a Pi: `pip install -r requirements-pi.txt && pip install --no-deps -e .`, copy
+`detector_fp32.onnx` (or `detector_int8.onnx`), `species_fp32.onnx` and the probe head
+(`head.npz`), and run the same `26_live.py`. A test checks that the camera code imports
+with pandas, torch, scikit-learn and OpenCV all missing.
+
+### The camera pipeline
+
+`scripts/26_live.py` (logic in [`src/ghats/live.py`](src/ghats/live.py)) takes a folder of
+photos, a video file or a webcam:
+
+1. **Detector** (MegaDetector, FP32 ONNX by default; INT8 optional) finds animal boxes;
+   letterbox, NMS and box clean-up are a numpy copy of PyTorch-Wildlife's.
+2. **Species model** (SpeciesNet backbone, FP32 ONNX) runs only on frames with a box, and
+   the Phase 2 probe head turns its features into a group and P(not background). The head
+   is 16 rows of weights, applied in numpy.
+3. **Events.** Photos are grouped into triggers by time gap (EXIF time, else file time).
+   Video is sampled at 2 fps and an event is a run of frames with an animal, closed after
+   3 s without one, so a sambar walking past is one sighting, not 50.
+4. **Keep or drop.** An event is kept when its best box has P(not background) >= 0.273,
+   the Phase 2 operating point picked on val cameras. The species is a vote over the
+   event's boxes, weighted by how animal-like each is, so one blurry frame doesn't decide it.
+5. **Send** one padded crop of the best box (longest side 384 px) and a JSON line:
+   species, time, P(animal), box.
+
+On 12 test-camera triggers (6 animal, 6 empty; cameras no model trained on), all six
+animals were kept with the right species (civet, sambar, macaque, two barking deer, wild
+boar, porcupine) and 4 of the 6 empty triggers were dropped. The camera would have sent
+252 KB instead of 76 MB of photos.
+
+![live demo](reports/phase6/live_demo.jpg)
+
+The two false alarms are worth a look: #7 is a branch blown out to a white bar by the IR
+flash (P(animal) 0.98, "barking deer"), and #1 is a small box on undergrowth at night. A
+test clip built from the same frames (empty, sambar, empty, macaque) came out as the right
+two sightings at the right times, plus the same blown-out branch.
+
+### What a camera would send
+
+[`reports/phase6/bandwidth.md`](reports/phase6/bandwidth.md): the 566 Phase 2 test
+triggers (2,886 photos, 1.5 MB each) from 114 unseen cameras, thresholds from val.
+
+| Policy | Animal events kept | Empty events sent | Data sent | Share |
+|---|---|---|---|---|
+| Every photo | 100% | 100% | 4,442 MB | 100% |
+| Photos of events the detector keeps | 91.1% | 44.7% | 3,838 MB | 86% |
+| Photos of events the detector + species model keep | 91.3% | 26.0% | 3,649 MB | 82% |
+| **One crop + metadata per kept event** | 91.3% | 26.0% | **10.8 MB** | **0.24%** |
+
+Filtering alone saves little here, because this test set is 74% animal triggers by design.
+Sending crops instead of photos is the big win: about 28 KB per animal event instead of
+10 MB. Projected to a camera where 80% of triggers are empty (common with wind and sun),
+1,000 triggers cost ~6,200 MB as photos, ~2,700 MB as filtered photos and ~8 MB as crops,
+small enough for a cellular or satellite link.
+
+### Quantisation: what INT8 cost
+
+INT8 stores weights and activations as 8-bit integers: ~4x smaller, and the integer maths
+small ARM CPUs and NPUs are fast at. Accuracy is checked on the same test sets and metrics
+as the earlier phases ([`reports/phase6/`](reports/phase6/)).
+
+| Model (test set) | Metric | PyTorch (GPU) | ONNX FP32 | ONNX INT8 | Size FP32 -> INT8 |
+|---|---|---|---|---|---|
+| Detector (Phase 1, 1,200 events) | event AUC | 0.910 | 0.910 | 0.900 | 27.7 -> 12.2 MB |
+| | empties removed at 90% recall | 66.2% | 66.2% | **58.5%** | |
+| | recall at the FP32 threshold, unchanged | 90.0% | 89.8% | 89.0% | |
+| Species (Phase 2, 2,338 crops) | macro F1 | 0.887 | 0.887 | **0.039** | 201 -> 55 MB |
+| Re-ID (Leopard ID 2022 test) | top-1 per leopard | 53.3% | 52.9% | 52.3% | 84 -> 23 MB |
+| | top-5 per leopard | 66.1% | 66.1% | 63.3% | |
+
+The FP32 exports match PyTorch (the detector's event scores move by at most 0.013 with the
+numpy post-processing; re-ID's 53.3 vs 52.9 is the GPU reference running in FP16). INT8 is
+a mixed result:
+
+- **Re-ID** quantises fine: dynamic INT8 on the ViT's matrix multiplies loses under a point
+  of top-1 and every embedding stays within cosine 0.98 of the original.
+- **Detector**: INT8 costs 8 points of filtering at the same recall (58.5% vs 66.2% of
+  empty events removed), and 22% of events see their score move by more than 0.05, so a
+  threshold tuned on FP32 doesn't carry over cleanly. On this x86 laptop it is also slower
+  (278 vs 187 ms per frame on 4 threads, see Speed), so its only win here is size. The camera
+  config therefore defaults to the **FP32 detector**; ARM CPUs with dot-product
+  instructions, like the Pi 5's, may run INT8 faster, which only a benchmark on the device
+  can settle.
+
+**The species model doesn't survive INT8.** On the 2,338 Phase 2 test crops the FP32 ONNX
+model matches PyTorch exactly (macro F1 0.887, accuracy 92.3%), and the INT8 one falls to
+macro F1 0.039 and 19% accuracy. It agrees with the FP32 prediction on 21% of crops, and
+its features point in an unrelated direction (cosine down to -0.51). I measured the error
+layer by layer: each layer on its own keeps 22-34 dB SQNR, which is normal for INT8, but nothing in
+EfficientNetV2 resets the error, so it compounds to about 7 dB by block 2 of 7. Keeping the
+squeeze-excite and depthwise convolutions in float (132 of 245) didn't help, and dynamic
+INT8 was as wrong and 15x slower. The fix would be quantisation-aware training, which needs
+SpeciesNet's training data. So the camera runs the species model in FP32, which costs
+less than it sounds: it only runs on frames where the detector found something.
+
+The detector needed three fixes to quantise well, all found by comparing layer outputs:
+signed 8-bit activations (ONNX Runtime's unsigned default overflows on x86 CPUs without
+VNNI, like this laptop's Ryzen), detection heads kept in float (their class-score
+convolutions quantised worst, 14-17 dB), and percentile calibration on train-camera frames.
+
+### Speed
+
+[`reports/phase6/benchmark_laptop-ryzen5-5600h.md`](reports/phase6/benchmark_laptop-ryzen5-5600h.md),
+`scripts/28_benchmark.py`: batch 1, ONNX Runtime CPU, Ryzen 5 5600H laptop (x86, no VNNI).
+
+| Model | MB | 1 thread | 2 threads | 4 threads | Memory |
+|---|---|---|---|---|---|
+| Detector FP32 | 27.7 | 539 ms | 291 ms | **187 ms** | 106 MB |
+| Detector INT8 | 12.2 | 717 ms | 406 ms | 278 ms | 133 MB |
+| Species FP32 (per box) | 201 | 1,010 ms | 521 ms | 298 ms | 265 MB |
+| Re-ID FP32 | 83.8 | 538 ms | 276 ms | 178 ms | 131 MB |
+| Re-ID INT8 | 22.7 | 355 ms | 182 ms | **117 ms** | 69 MB |
+
+On 4 threads an empty frame costs one detector pass (~0.2 s for the model, ~0.4 s with
+decoding and resizing a 4K JPEG in Python), and a frame with an animal adds ~0.3 s per box
+for the species model, so the whole pipeline needs well under 1 GB of RAM and runs at 1-3
+frames a second. Camera traps fire in occasional bursts of a few photos, so there is room
+even if a Pi turns out several times slower; a continuous video feed would need frame
+skipping (the live script samples 2 fps) or an accelerator.
+
+INT8 helps re-ID (1.5x faster, half the memory) and hurts the detector on this CPU (1.5x
+slower: the quantise/dequantise steps cost more than the integer maths saves without
+VNNI). ARM chips with dot-product instructions are where INT8 usually pays off, so the
+detector choice should be re-checked on the device.
+
+### Not done
+
+- **A real device.** No Pi or Jetson numbers. `28_benchmark.py` and `26_live.py` are ready
+  to run on one unchanged.
+- **GPU / TensorRT and an ARM64 CI runner** were in the plan; I didn't set them up.
+- **INT8 species model**, see above. A smaller species network trained on these groups
+  (or quantisation-aware training) is the next step if the Pi is too slow in FP32.
+- **Site calibration.** The keep threshold comes from SWG val cameras. Phases 3 and 5
+  showed thresholds don't transfer; a real deployment should re-tune it from a few days
+  of reviewed triggers (the Phase 5 dashboard does exactly that for re-ID).
+- **Power** wasn't measured (needs the device and a USB power meter).
+
 ## Repository layout
 
 ```
@@ -672,16 +829,20 @@ configs/phase1.yaml        dataset, sampling, detector, evaluation settings
 configs/phase2.yaml        bigger sample for classification, crop and split settings
 configs/phase3.yaml        leopard datasets, crops, split by individual, re-ID models
 configs/phase5.yaml        review export: models, threshold, audit sample
-src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid, reid_model, review
+configs/phase6.yaml        camera pipeline: models, operating point, event grouping
+src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid, reid_model, review,
+                           edge (numpy detector post-processing), live (camera pipeline; numpy + onnxruntime only)
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
 scripts/12..15             leopard crops -> re-ID baseline -> ArcFace fine-tune -> open set (Phase 3)
 scripts/16..21             LeopardID102: manifest -> crops -> flank classifier -> zero-shot re-ID -> compare -> travel prior
 scripts/22                 export model outputs for the dashboard (Phase 5)
+scripts/23..28             ONNX export -> INT8 -> accuracy check -> live pipeline -> bandwidth -> benchmark (Phase 6)
+requirements-pi.txt        what a camera needs (numpy, Pillow, PyYAML, onnxruntime; OpenCV for video)
 dashboard/server           review API: Node.js, TypeScript, Express, SQLite
 dashboard/web              review UI: React, TypeScript, Vite
 tests/                     unit tests + synthetic end-to-end pipeline test
-reports/phase1..5/          generated results and screenshots (committed)
+reports/phase1..6/          generated results and screenshots (committed)
 ```
 
 ## Data and models
