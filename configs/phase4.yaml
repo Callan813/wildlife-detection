@@ -1,0 +1,90 @@
+# Phase 4: search the photos in plain English
+#
+# scripts/29_embed.py turns every frame and every detector crop into a vector,
+# scripts/30_search_eval.py measures how well queries find the right events, and
+# scripts/31_search_server.py answers queries for the dashboard.
+#
+# Only the val and test cameras are indexed: the Phase 2 species head was trained on the
+# train cameras, so its predictions are only honest on the other two.
+
+data:
+  manifest: data/swg/manifest_phase2.csv
+  splits: data/crops/splits.csv
+  crops: data/crops/crops.csv
+  crop_dir: data/crops/images
+  predictions: outputs/phase2/speciesnet_probe/predictions.csv   # probe head, val + test crops
+  index_splits: [val, test]
+
+models:
+  dir: outputs/phase4/models          # local copies, safetensors only (no pickle files)
+  # BioCLIP 2 (imageomics/bioclip-2, ViT-L/14) was trained on 214M images of living things
+  # with their taxonomic names. OpenAI CLIP ViT-B/16 is the general-purpose comparison.
+  names: [bioclip-2, clip-b16]
+  search: bioclip-2                   # the one the search server uses
+  batch_size: 64
+  workers: 4
+
+embeddings: outputs/phase4/embeddings
+
+search:
+  night_hours: [18, 6]                # capture hour >= 18 or < 6 counts as night
+  min_box_conf: 0.2                   # boxes that count for "two or more ..." queries
+  # Crops matched against the query text need at least this detector confidence. Lower boxes
+  # are mostly leaves and shadows that can beat the real animal on a free-text query (seen in
+  # the 32_search_gallery.py sheets). The labels can't settle it: on species queries any
+  # floor from 0 to 0.3 scores within 0.02 AP (reports/phase4/search_eval.md).
+  crop_min_conf: 0.1
+  # A species filter keeps an event when the probe gives that species at least this
+  # probability on one of its boxes. Best mean F1 on val cameras (30_search_eval.py):
+  # on test it keeps 79% of the right events, and 96% of what it keeps is right.
+  species_min_prob: 0.8
+
+# What people might type for each species group, and the taxon BioCLIP knows it by.
+# The photos are of the SWG species (Vietnam and Laos); the names include the Western
+# Ghats animals they stand in for (see configs/phase1.yaml).
+species:
+  wild_boar:
+    words: [wild boar, wild pig, boar, pig, pigs, boars]
+    taxon: Sus scrofa
+  sambar:
+    words: [sambar, sambar deer, sambars]
+    taxon: Rusa unicolor
+  barking_deer:
+    words: [barking deer, muntjac, muntjacs]
+    taxon: Muntiacus
+  mouse_deer:
+    words: [mouse deer, chevrotain, chevrotains]
+    taxon: Tragulus
+  civet:
+    words: [civet, civets, palm civet, toddy cat]
+    taxon: Paradoxurus hermaphroditus
+  mongoose:
+    words: [mongoose, mongooses]
+    taxon: Herpestes urva
+  small_cat:
+    words: [small cat, wild cat, leopard cat, jungle cat, golden cat, marbled cat, cat, cats]
+    taxon: Prionailurus bengalensis
+  marten:
+    words: [marten, martens, nilgiri marten, yellow-throated marten]
+    taxon: Martes flavigula
+  bear:
+    words: [bear, bears, sloth bear, black bear, sun bear]
+    taxon: Ursus thibetanus
+  pangolin:
+    words: [pangolin, pangolins]
+    taxon: Manis pentadactyla
+  porcupine:
+    words: [porcupine, porcupines]
+    taxon: Hystrix brachyura
+  macaque:
+    words: [macaque, macaques, monkey, monkeys, bonnet macaque]
+    taxon: Macaca
+  squirrel:
+    words: [squirrel, squirrels, giant squirrel, flying squirrel]
+    taxon: Ratufa bicolor
+  junglefowl:
+    words: [junglefowl, jungle fowl, red junglefowl, fowl, chicken, bird, birds]
+    taxon: Gallus gallus
+  rodent:
+    words: [rodent, rodents, rat, rats, mouse, mice]
+    taxon: Muridae

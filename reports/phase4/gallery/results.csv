@@ -1,0 +1,133 @@
+query,rank,event,label,night,location,score,image
+animal drinking water,1,seq:f05efd51-8c29-11eb-a6e6-000d3a74c7de,mongoose,False,loc_0148,0.6375,animal_drinking_water.jpg
+animal drinking water,2,seq:07c4872b-8c2a-11eb-a873-000d3a74c7de,junglefowl,False,loc_0610,0.6374,animal_drinking_water.jpg
+animal drinking water,3,seq:f05efcd5-8c29-11eb-b4a7-000d3a74c7de,mongoose,False,loc_0148,0.6367,animal_drinking_water.jpg
+animal drinking water,4,seq:2544d587-8c2a-11eb-a988-000d3a74c7de,macaque,False,loc_0675,0.6352,animal_drinking_water.jpg
+animal drinking water,5,seq:dd50dfc0-8c29-11eb-b185-000d3a74c7de,wild_boar,False,loc_0146,0.6335,animal_drinking_water.jpg
+animal drinking water,6,seq:3585653f-8c2a-11eb-91b5-000d3a74c7de,mongoose,False,loc_0253,0.6321,animal_drinking_water.jpg
+animal drinking water,7,seq:f05efd54-8c29-11eb-8611-000d3a74c7de,mongoose,False,loc_0148,0.6309,animal_drinking_water.jpg
+animal drinking water,8,seq:00fa15f3-8c2a-11eb-b8f5-000d3a74c7de,marten,False,loc_0584,0.6294,animal_drinking_water.jpg
+animal drinking water,9,seq:e23e2e53-8c29-11eb-83d6-000d3a74c7de,porcupine,True,loc_0545,0.6289,animal_drinking_water.jpg
+animal drinking water,10,seq:31fdbb24-8c2a-11eb-95c6-000d3a74c7de,small_cat,False,loc_0093,0.6283,animal_drinking_water.jpg
+animal drinking water,11,seq:ec6e7caf-8c29-11eb-8888-000d3a74c7de,mongoose,False,loc_0109,0.6279,animal_drinking_water.jpg
+animal drinking water,12,seq:f0615dab-8c29-11eb-a140-000d3a74c7de,marten,True,loc_0148,0.6272,animal_drinking_water.jpg
+animal close to the camera,1,seq:00fa15f3-8c2a-11eb-b8f5-000d3a74c7de,marten,False,loc_0584,0.6704,animal_close_to_the_camera.jpg
+animal close to the camera,2,seq:07c4872b-8c2a-11eb-a873-000d3a74c7de,junglefowl,False,loc_0610,0.6681,animal_close_to_the_camera.jpg
+animal close to the camera,3,seq:2544d587-8c2a-11eb-a988-000d3a74c7de,macaque,False,loc_0675,0.6656,animal_close_to_the_camera.jpg
+animal close to the camera,4,seq:dd50dfc0-8c29-11eb-b185-000d3a74c7de,wild_boar,False,loc_0146,0.6624,animal_close_to_the_camera.jpg
+animal close to the camera,5,seq:3f2b793b-8c2a-11eb-acf2-000d3a74c7de,marten,False,loc_0111,0.6612,animal_close_to_the_camera.jpg
+animal close to the camera,6,seq:16c49f65-8c2a-11eb-8738-000d3a74c7de,marten,False,loc_0568,0.6597,animal_close_to_the_camera.jpg
+animal close to the camera,7,seq:2bf71381-8c2a-11eb-8b64-000d3a74c7de,wild_boar,False,loc_0240,0.6578,animal_close_to_the_camera.jpg
+animal close to the camera,8,seq:39b3e6ea-8c2a-11eb-899d-000d3a74c7de,macaque,False,loc_0588,0.6575,animal_close_to_the_camera.jpg
+animal close to the camera,9,seq:0933b822-8c2a-11eb-84cf-000d3a74c7de,squirrel,False,loc_0608,0.6569,animal_close_to_the_camera.jpg
+animal close to the camera,10,seq:31fdbb24-8c2a-11eb-95c6-000d3a74c7de,small_cat,False,loc_0093,0.6569,animal_close_to_the_camera.jpg
+animal close to the camera,11,seq:30933e9e-8c2a-11eb-ac53-000d3a74c7de,macaque,False,loc_0592,0.6564,animal_close_to_the_camera.jpg
+animal close to the camera,12,seq:07c22752-8c2a-11eb-add2-000d3a74c7de,marten,False,loc_0610,0.6559,animal_close_to_the_camera.jpg
+macaque climbing a tree,1,seq:12070e29-8c2a-11eb-8c69-000d3a74c7de,macaque,False,loc_0342,0.6586,macaque_climbing_a_tree.jpg
+macaque climbing a tree,2,seq:39b3e6ea-8c2a-11eb-899d-000d3a74c7de,macaque,False,loc_0588,0.6555,macaque_climbing_a_tree.jpg
+macaque climbing a tree,3,seq:3850a6e8-8c2a-11eb-bc3f-000d3a74c7de,macaque,False,loc_0264,0.6494,macaque_climbing_a_tree.jpg
+macaque climbing a tree,4,seq:0cc015f5-8c2a-11eb-b9b9-000d3a74c7de,macaque,False,loc_0050,0.6453,macaque_climbing_a_tree.jpg
+macaque climbing a tree,5,seq:09361653-8c2a-11eb-b449-000d3a74c7de,macaque,False,loc_0608,0.6453,macaque_climbing_a_tree.jpg
+macaque climbing a tree,6,seq:17db9054-8c2a-11eb-bb24-000d3a74c7de,macaque,False,loc_0347,0.6429,macaque_climbing_a_tree.jpg
+macaque climbing a tree,7,seq:39b3e5fc-8c2a-11eb-b1e5-000d3a74c7de,macaque,False,loc_0588,0.6382,macaque_climbing_a_tree.jpg
+macaque climbing a tree,8,seq:30933f5a-8c2a-11eb-baaf-000d3a74c7de,macaque,False,loc_0592,0.6381,macaque_climbing_a_tree.jpg
+macaque climbing a tree,9,seq:14ae8d7c-8c2a-11eb-ad7b-000d3a74c7de,macaque,False,loc_0275,0.6369,macaque_climbing_a_tree.jpg
+macaque climbing a tree,10,seq:e2d926ea-8c29-11eb-8269-000d3a74c7de,macaque,False,loc_0458,0.636,macaque_climbing_a_tree.jpg
+macaque climbing a tree,11,seq:0cc0160e-8c2a-11eb-b686-000d3a74c7de,macaque,False,loc_0050,0.6355,macaque_climbing_a_tree.jpg
+macaque climbing a tree,12,seq:e66cb346-8c29-11eb-b203-000d3a74c7de,macaque,False,loc_0053,0.6343,macaque_climbing_a_tree.jpg
+wild pig digging in the ground,1,seq:33b90973-8c2a-11eb-b667-000d3a74c7de,wild_boar,False,loc_0826,0.6726,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,2,seq:3ffae50a-8c2a-11eb-8b53-000d3a74c7de,wild_boar,True,loc_0495,0.6684,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,3,seq:3d0cd959-8c2a-11eb-b270-000d3a74c7de,wild_boar,False,loc_0607,0.6669,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,4,seq:087c1dc0-8c2a-11eb-801b-000d3a74c7de,wild_boar,False,loc_0585,0.6657,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,5,seq:3d414c42-8c2a-11eb-a717-000d3a74c7de,wild_boar,False,loc_0463,0.6653,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,6,seq:f0adab96-8c29-11eb-9656-000d3a74c7de,wild_boar,False,loc_0590,0.6643,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,7,seq:eb826971-8c29-11eb-b5b8-000d3a74c7de,wild_boar,False,loc_0330,0.6641,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,8,seq:dd50dfc0-8c29-11eb-b185-000d3a74c7de,wild_boar,False,loc_0146,0.6636,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,9,seq:f57be61d-8c29-11eb-801f-000d3a74c7de,wild_boar,False,loc_0067,0.663,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,10,seq:e2d9268f-8c29-11eb-8b7f-000d3a74c7de,empty,False,loc_0458,0.6617,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,11,seq:3095a20b-8c2a-11eb-8b2c-000d3a74c7de,wild_boar,False,loc_0592,0.6613,wild_pig_digging_in_the_ground.jpg
+wild pig digging in the ground,12,seq:2bf71381-8c2a-11eb-8b64-000d3a74c7de,wild_boar,False,loc_0240,0.6613,wild_pig_digging_in_the_ground.jpg
+animal running,1,seq:07c4872b-8c2a-11eb-a873-000d3a74c7de,junglefowl,False,loc_0610,0.681,animal_running.jpg
+animal running,2,seq:2544d587-8c2a-11eb-a988-000d3a74c7de,macaque,False,loc_0675,0.6809,animal_running.jpg
+animal running,3,seq:00fa15f3-8c2a-11eb-b8f5-000d3a74c7de,marten,False,loc_0584,0.6762,animal_running.jpg
+animal running,4,seq:31fdbb24-8c2a-11eb-95c6-000d3a74c7de,small_cat,False,loc_0093,0.6704,animal_running.jpg
+animal running,5,seq:135278ac-8c2a-11eb-aaf0-000d3a74c7de,wild_boar,False,loc_0835,0.6681,animal_running.jpg
+animal running,6,seq:30933e9e-8c2a-11eb-ac53-000d3a74c7de,macaque,False,loc_0592,0.6671,animal_running.jpg
+animal running,7,seq:21999537-8c2a-11eb-8a9f-000d3a74c7de,mouse_deer,False,loc_0390,0.6661,animal_running.jpg
+animal running,8,seq:07bfc632-8c2a-11eb-a2e3-000d3a74c7de,marten,False,loc_0610,0.6659,animal_running.jpg
+animal running,9,seq:16c49f65-8c2a-11eb-8738-000d3a74c7de,marten,False,loc_0568,0.6658,animal_running.jpg
+animal running,10,seq:3850a6c0-8c2a-11eb-97fc-000d3a74c7de,sambar,False,loc_0264,0.6653,animal_running.jpg
+animal running,11,seq:3f2b793b-8c2a-11eb-acf2-000d3a74c7de,marten,False,loc_0111,0.6647,animal_running.jpg
+animal running,12,seq:120970af-8c2a-11eb-91b9-000d3a74c7de,macaque,False,loc_0342,0.6646,animal_running.jpg
+mother with young,1,seq:07c4872b-8c2a-11eb-a873-000d3a74c7de,junglefowl,False,loc_0610,0.6636,mother_with_young.jpg
+mother with young,2,seq:0ef23108-8c2a-11eb-a849-000d3a74c7de,porcupine,True,loc_0369,0.6616,mother_with_young.jpg
+mother with young,3,seq:e341ab61-8c29-11eb-818e-000d3a74c7de,empty,False,loc_0844,0.6563,mother_with_young.jpg
+mother with young,4,seq:16c49f65-8c2a-11eb-8738-000d3a74c7de,marten,False,loc_0568,0.6563,mother_with_young.jpg
+mother with young,5,seq:f2cd4244-8c29-11eb-85f0-000d3a74c7de,bear,True,loc_0337,0.6557,mother_with_young.jpg
+mother with young,6,seq:00153304-8c2a-11eb-a735-000d3a74c7de,barking_deer,True,loc_0039,0.6553,mother_with_young.jpg
+mother with young,7,seq:e23e2e53-8c29-11eb-83d6-000d3a74c7de,porcupine,True,loc_0545,0.6551,mother_with_young.jpg
+mother with young,8,seq:00153312-8c2a-11eb-a3e7-000d3a74c7de,empty,False,loc_0039,0.6549,mother_with_young.jpg
+mother with young,9,seq:3753ed02-8c2a-11eb-bc2c-000d3a74c7de,marten,True,loc_0214,0.6542,mother_with_young.jpg
+mother with young,10,seq:34836c34-8c2a-11eb-a5ff-000d3a74c7de,squirrel,False,loc_0575,0.654,mother_with_young.jpg
+mother with young,11,seq:2b0b07ec-8c2a-11eb-bd1c-000d3a74c7de,porcupine,True,loc_0328,0.653,mother_with_young.jpg
+mother with young,12,seq:e1c111ac-8c29-11eb-ae51-000d3a74c7de,empty,False,loc_0349,0.6528,mother_with_young.jpg
+bird on the ground,1,seq:07c4872b-8c2a-11eb-a873-000d3a74c7de,junglefowl,False,loc_0610,0.6541,bird_on_the_ground.jpg
+bird on the ground,2,seq:0936148f-8c2a-11eb-910d-000d3a74c7de,junglefowl,False,loc_0608,0.6446,bird_on_the_ground.jpg
+bird on the ground,3,seq:26b6647e-8c2a-11eb-a213-000d3a74c7de,junglefowl,False,loc_0392,0.6352,bird_on_the_ground.jpg
+bird on the ground,4,seq:39b3e8d2-8c2a-11eb-b545-000d3a74c7de,junglefowl,False,loc_0588,0.6299,bird_on_the_ground.jpg
+bird on the ground,5,seq:093615fe-8c2a-11eb-97b6-000d3a74c7de,junglefowl,False,loc_0608,0.6289,bird_on_the_ground.jpg
+bird on the ground,6,seq:3d0f3f48-8c2a-11eb-9dd7-000d3a74c7de,junglefowl,False,loc_0607,0.6275,bird_on_the_ground.jpg
+bird on the ground,7,seq:fad4a02e-8c29-11eb-a311-000d3a74c7de,junglefowl,False,loc_0890,0.6255,bird_on_the_ground.jpg
+bird on the ground,8,seq:ec3c50a3-8c29-11eb-b185-000d3a74c7de,junglefowl,False,loc_0034,0.6247,bird_on_the_ground.jpg
+bird on the ground,9,seq:39b3ea17-8c2a-11eb-8b89-000d3a74c7de,junglefowl,False,loc_0588,0.6244,bird_on_the_ground.jpg
+bird on the ground,10,seq:04192d12-8c2a-11eb-ad26-000d3a74c7de,junglefowl,False,loc_0582,0.6238,bird_on_the_ground.jpg
+bird on the ground,11,seq:ecbab847-8c29-11eb-8f1d-000d3a74c7de,junglefowl,False,loc_0542,0.6213,bird_on_the_ground.jpg
+bird on the ground,12,seq:221cb805-8c2a-11eb-ac92-000d3a74c7de,junglefowl,False,loc_0131,0.6204,bird_on_the_ground.jpg
+animal in the rain,1,seq:16c49f65-8c2a-11eb-8738-000d3a74c7de,marten,False,loc_0568,0.6517,animal_in_the_rain.jpg
+animal in the rain,2,seq:00fa15f3-8c2a-11eb-b8f5-000d3a74c7de,marten,False,loc_0584,0.65,animal_in_the_rain.jpg
+animal in the rain,3,seq:087c2050-8c2a-11eb-9721-000d3a74c7de,wild_boar,False,loc_0585,0.6417,animal_in_the_rain.jpg
+animal in the rain,4,seq:3f2b793b-8c2a-11eb-acf2-000d3a74c7de,marten,False,loc_0111,0.6412,animal_in_the_rain.jpg
+animal in the rain,5,seq:120970af-8c2a-11eb-91b9-000d3a74c7de,macaque,False,loc_0342,0.6409,animal_in_the_rain.jpg
+animal in the rain,6,seq:34836cc4-8c2a-11eb-8f13-000d3a74c7de,squirrel,False,loc_0575,0.6405,animal_in_the_rain.jpg
+animal in the rain,7,seq:39b3e5fc-8c2a-11eb-b1e5-000d3a74c7de,macaque,False,loc_0588,0.64,animal_in_the_rain.jpg
+animal in the rain,8,seq:07c4872b-8c2a-11eb-a873-000d3a74c7de,junglefowl,False,loc_0610,0.6399,animal_in_the_rain.jpg
+animal in the rain,9,seq:34836c34-8c2a-11eb-a5ff-000d3a74c7de,squirrel,False,loc_0575,0.6397,animal_in_the_rain.jpg
+animal in the rain,10,seq:fd476b42-8c29-11eb-af81-000d3a74c7de,empty,False,loc_0878,0.6397,animal_in_the_rain.jpg
+animal in the rain,11,seq:39b3e6ea-8c2a-11eb-899d-000d3a74c7de,macaque,False,loc_0588,0.6388,animal_in_the_rain.jpg
+animal in the rain,12,seq:31fdbb24-8c2a-11eb-95c6-000d3a74c7de,small_cat,False,loc_0093,0.6385,animal_in_the_rain.jpg
+two wild pigs,1,seq:087c1f75-8c2a-11eb-8931-000d3a74c7de,wild_boar,False,loc_0585,0.9999,two_wild_pigs.jpg
+two wild pigs,2,seq:3d0cd959-8c2a-11eb-b270-000d3a74c7de,wild_boar,False,loc_0607,0.9998,two_wild_pigs.jpg
+two wild pigs,3,seq:33b90973-8c2a-11eb-b667-000d3a74c7de,wild_boar,False,loc_0826,0.9998,two_wild_pigs.jpg
+two wild pigs,4,seq:087c1f28-8c2a-11eb-acfc-000d3a74c7de,wild_boar,False,loc_0585,0.9998,two_wild_pigs.jpg
+two wild pigs,5,seq:dd50dfc0-8c29-11eb-b185-000d3a74c7de,wild_boar,False,loc_0146,0.9998,two_wild_pigs.jpg
+two wild pigs,6,seq:fd12fd46-8c29-11eb-a533-000d3a74c7de,wild_boar,False,loc_0604,0.9997,two_wild_pigs.jpg
+two wild pigs,7,seq:33384a16-8c2a-11eb-a003-000d3a74c7de,wild_boar,False,loc_0104,0.9997,two_wild_pigs.jpg
+two wild pigs,8,seq:0b3913ed-8c2a-11eb-9fee-000d3a74c7de,wild_boar,False,loc_0712,0.9996,two_wild_pigs.jpg
+two wild pigs,9,seq:f0ada9db-8c29-11eb-836a-000d3a74c7de,wild_boar,False,loc_0590,0.9995,two_wild_pigs.jpg
+two wild pigs,10,seq:fd12fb0e-8c29-11eb-8bbf-000d3a74c7de,wild_boar,False,loc_0604,0.9994,two_wild_pigs.jpg
+two wild pigs,11,seq:058ab808-8c2a-11eb-a5c8-000d3a74c7de,wild_boar,False,loc_0272,0.9994,two_wild_pigs.jpg
+two wild pigs,12,seq:3a66b8d0-8c2a-11eb-b7b5-000d3a74c7de,wild_boar,False,loc_0490,0.9994,two_wild_pigs.jpg
+sambar at night,1,seq:f71d55c9-8c29-11eb-8a1e-000d3a74c7de,sambar,True,loc_0187,1.0,sambar_at_night.jpg
+sambar at night,2,seq:3999ae51-8c2a-11eb-829b-000d3a74c7de,sambar,True,loc_0270,1.0,sambar_at_night.jpg
+sambar at night,3,seq:df47ee01-8c29-11eb-b22d-000d3a74c7de,sambar,True,loc_0537,0.9999,sambar_at_night.jpg
+sambar at night,4,seq:21999481-8c2a-11eb-ad22-000d3a74c7de,sambar,True,loc_0390,0.9999,sambar_at_night.jpg
+sambar at night,5,seq:2bf71391-8c2a-11eb-ab7f-000d3a74c7de,sambar,True,loc_0240,0.9999,sambar_at_night.jpg
+sambar at night,6,seq:dd50e0de-8c29-11eb-8494-000d3a74c7de,sambar,True,loc_0146,0.9999,sambar_at_night.jpg
+sambar at night,7,seq:1b8bb5ef-8c2a-11eb-bf5a-000d3a74c7de,sambar,True,loc_0024,0.9999,sambar_at_night.jpg
+sambar at night,8,seq:2d152b9b-8c2a-11eb-a280-000d3a74c7de,sambar,True,loc_0255,0.9999,sambar_at_night.jpg
+sambar at night,9,seq:ecd8da20-8c29-11eb-9cb4-000d3a74c7de,sambar,True,loc_0163,0.9999,sambar_at_night.jpg
+sambar at night,10,seq:e8733af9-8c29-11eb-b5c5-000d3a74c7de,sambar,True,loc_0293,0.9999,sambar_at_night.jpg
+sambar at night,11,seq:3999ae5b-8c2a-11eb-8d64-000d3a74c7de,sambar,True,loc_0270,0.9999,sambar_at_night.jpg
+sambar at night,12,seq:f71d54f2-8c29-11eb-b17d-000d3a74c7de,sambar,True,loc_0187,0.9999,sambar_at_night.jpg
+a tiger,1,seq:f05efd51-8c29-11eb-a6e6-000d3a74c7de,mongoose,False,loc_0148,0.6935,a_tiger.jpg
+a tiger,2,seq:31fdbb24-8c2a-11eb-95c6-000d3a74c7de,small_cat,False,loc_0093,0.693,a_tiger.jpg
+a tiger,3,seq:293a1f44-8c2a-11eb-aa98-000d3a74c7de,empty,False,loc_0847,0.692,a_tiger.jpg
+a tiger,4,seq:17db90a9-8c2a-11eb-845c-000d3a74c7de,mongoose,False,loc_0347,0.6892,a_tiger.jpg
+a tiger,5,seq:135278ac-8c2a-11eb-aaf0-000d3a74c7de,wild_boar,False,loc_0835,0.6885,a_tiger.jpg
+a tiger,6,seq:120970af-8c2a-11eb-91b9-000d3a74c7de,macaque,False,loc_0342,0.688,a_tiger.jpg
+a tiger,7,seq:01144f9f-8c2a-11eb-b149-000d3a74c7de,empty,False,loc_0848,0.6868,a_tiger.jpg
+a tiger,8,seq:078db120-8c2a-11eb-b1dd-000d3a74c7de,empty,False,loc_0929,0.6867,a_tiger.jpg
+a tiger,9,seq:0da43515-8c2a-11eb-bf8d-000d3a74c7de,small_cat,False,loc_0322,0.6865,a_tiger.jpg
+a tiger,10,seq:39b3e6ea-8c2a-11eb-899d-000d3a74c7de,macaque,False,loc_0588,0.6865,a_tiger.jpg
+a tiger,11,seq:2debc400-8c2a-11eb-b317-000d3a74c7de,empty,False,loc_0600,0.6859,a_tiger.jpg
+a tiger,12,seq:00fa15f3-8c2a-11eb-b8f5-000d3a74c7de,marten,False,loc_0584,0.6857,a_tiger.jpg

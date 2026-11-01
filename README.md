@@ -17,7 +17,7 @@ what needs a human decision.
 | 1 | Animal detection and empty-frame filtering (MegaDetector V6) | **Done** (results below) |
 | 2 | Species classification for Ghats groups, location-split evaluation, SpeciesNet baseline | **Done** (results below) |
 | 3 | Leopard re-identification (metric learning + travel-feasibility prior) | **Done**; travel prior tested on a second dataset (LeopardID102) |
-| 4 | Natural-language search over detections (BioCLIP/CLIP + vector DB) | Planned |
+| 4 | Search the photos in plain English (filters + BioCLIP 2 embeddings), in the dashboard | **Done** (results below) |
 | 5 | Reviewer dashboard with an active-learning loop | **Done**: review + audit sample + threshold re-tuning; retraining from reviews not yet |
 | 6 | Edge deployment: ONNX/INT8 camera pipeline (photos, video, webcam), cascade design, bandwidth, benchmarks | **Done** on a laptop CPU standing in for a Pi; no Pi/Jetson numbers yet |
 
@@ -582,6 +582,112 @@ So in a real system I'd use distance to *sort* the shortlist (nearby candidates 
 rather than hide anything, and let the reviewer widen the search. That fits the Phase 5
 reviewer dashboard.
 
+## Phase 4: search in plain English
+
+**Question:** can someone type "civets at night" or "animal drinking water" and get the
+right trigger events back, and which parts of that can a CLIP-style model do?
+
+![search](reports/phase4/dashboard_search.jpg)
+
+### Run it
+
+```bash
+pip install open_clip_torch
+python scripts/29_embed.py              # every frame and crop -> a vector (~10 min on an RTX 3050, both models)
+python scripts/30_search_eval.py        # queries with known answers, test cameras
+python scripts/32_search_gallery.py     # queries judged by eye -> reports/phase4/gallery/
+python scripts/31_search_server.py      # http://127.0.0.1:4318; the dashboard's Search tab talks to it
+```
+
+The models are loaded from local copies with safetensors weights only (the download line
+is in `29_embed.py`'s docstring), so nothing is unpickled. The index is the val and test
+cameras of Phase 2: 1,115 events, 5,635 frames, 7,143 detector crops. The Phase 2 species
+model was trained on the train cameras, so its predictions are only honest on the others.
+
+### How a query is read
+
+[`src/ghats/search.py`](src/ghats/search.py) splits a query into two parts:
+
+- **Filters**, for whatever the metadata already answers exactly: species (word lists in
+  [`configs/phase4.yaml`](configs/phase4.yaml), including the Ghats names for the SWG
+  stand-ins, so "sloth bear" or "Nilgiri marten" work), night or day (capture hour), empty,
+  "two or more", camera, year, month. Species comes from the Phase 2 model: an event counts
+  when one of its boxes gets >= 0.8 for that species.
+- **Meaning**, for the words left over ("drinking water", "climbing"): the query is turned
+  into a BioCLIP 2 text vector and compared with the image vector of every frame and crop.
+  An event scores as well as its best frame or crop.
+
+If nothing is left over ("sambar at night"), the filtered events are ranked by the species
+model's probability. The dashboard shows how the query was read (the chips under the
+search box), so a wrong reading is easy to spot.
+
+### Results
+
+On the 566 test-camera events (settings picked on the 549 val events; full tables in
+[`reports/phase4/search_eval.md`](reports/phase4/search_eval.md)). AP is average precision:
+1.0 means every right event ranks above every wrong one.
+
+| Query type | Phase 2 model / metadata | BioCLIP 2 | OpenAI CLIP | Random order |
+|---|---|---|---|---|
+| Species (15 queries, mean AP) | **0.872** | 0.540 | 0.362 | 0.049 |
+| Empty events | **0.701** | 0.333 | 0.308 | 0.265 |
+| Night (truth = capture hour) | colour score 0.653 | 0.738 | **0.888** | 0.417 |
+
+- **The trained species model wins easily.** Added to it with a weight chosen on val,
+  BioCLIP's score adds nothing: the weight comes out at 0. BioCLIP 2 without any training is
+  far better than chance and better than CLIP, but squirrels (0.04) and rodents (0.19) are
+  almost invisible to it. Those are small animals in a 224-pixel image.
+- **Scientific names work better than common names** for BioCLIP 2 (0.54 vs 0.43), which
+  makes sense for a model trained on taxonomic labels. Crops work better than whole frames
+  (0.54 vs 0.36).
+- **"Empty" is not a concept these models have.** Embedding search for empty frames is
+  barely above random order. The detector-based filter is the only thing that works.
+- **Night is the exception.** CLIP picks out night shots well, better than my colour score
+  ("IR shots are grey"), which some flash cameras break. Search uses the capture hour, which
+  is the ground truth here by definition. An embedding would only help when a camera's clock is wrong.
+- **The species filter** keeps 79% of the right test events, and 96% of what it keeps is right.
+
+For questions the labels can't check, I looked at the top 12 for 11 queries
+([`reports/phase4/by_eye.md`](reports/phase4/by_eye.md), sheets in `reports/phase4/gallery/`):
+
+| Query | Right in the top 12 |
+|---|---|
+| sambar at night | 12 |
+| bird on the ground | 12 junglefowl events |
+| two wild pigs | 12 pigs, 5 with two or more in view |
+| macaque climbing a tree | 12 macaques, 1 climbing |
+| animal drinking water | 0 drinking, though 6 are at a stream |
+| mother with young | 0 |
+
+So filters do the precise work, and the embeddings understand scenes (water, haze, a dark
+frame) but not what an animal is doing. A text-only query always returns something: "a
+tiger" brings back small cats and empty frames, because there are no tigers in this data.
+
+**A bug the contact sheets caught:** at first the boxes shown were often on leaves next to
+the animal. The crops go down to detector confidence 0.02, and a patch of leaves can match
+"a bird" better than the bird in the next box. Now only crops >= 0.1 are compared with the
+text. On the labelled species queries any floor from 0 to 0.3 scores within 0.02 AP, so the
+choice rests on the sheets, not the numbers.
+
+### In the dashboard
+
+The Search tab sends the query to the review API, which forwards it to
+`31_search_server.py`, so the browser only talks to one server. The search server holds BioCLIP 2's text
+encoder on the CPU (about 260 ms per query with leftover words, about 20 ms for filters
+only). Each result shows the frame and box that matched, the species model's guess, camera
+and time, and a **More like this** button that searches with that event's best crop.
+`?tab=search&q=...` opens a search directly, so a search can be shared as a link.
+
+### Not done
+
+- **Qdrant / a vector database.** The plan named one, but 13k vectors is a 20 MB numpy
+  array and a search is one matrix product. A real archive (millions of frames) would need it.
+- **Behaviour.** The embeddings can't do "drinking" or "climbing". That needs either a
+  model trained on behaviour labels or short-clip models on video. Neither is in reach with SWG's labels.
+- **A "no good match" answer** for text-only queries. Setting a similarity cut-off needs
+  labelled queries.
+- **Counting** relies on detector boxes >= 0.2 in one frame, which sometimes counts one pig twice.
+
 ## Phase 5: reviewer dashboard
 
 **Question:** the models are good at ranking but not sure enough to act alone. Species
@@ -828,16 +934,19 @@ detector choice should be re-checked on the device.
 configs/phase1.yaml        dataset, sampling, detector, evaluation settings
 configs/phase2.yaml        bigger sample for classification, crop and split settings
 configs/phase3.yaml        leopard datasets, crops, split by individual, re-ID models
+configs/phase4.yaml        search: index, models, filters, species word lists
 configs/phase5.yaml        review export: models, threshold, audit sample
 configs/phase6.yaml        camera pipeline: models, operating point, event grouping
 src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid, reid_model, review,
-                           edge (numpy detector post-processing), live (camera pipeline; numpy + onnxruntime only)
+                           edge (numpy detector post-processing), live (camera pipeline; numpy + onnxruntime only),
+                           search (query parsing, filters, ranking), search_service (what the search server returns)
 scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
 scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
 scripts/12..15             leopard crops -> re-ID baseline -> ArcFace fine-tune -> open set (Phase 3)
 scripts/16..21             LeopardID102: manifest -> crops -> flank classifier -> zero-shot re-ID -> compare -> travel prior
 scripts/22                 export model outputs for the dashboard (Phase 5)
 scripts/23..28             ONNX export -> INT8 -> accuracy check -> live pipeline -> bandwidth -> benchmark (Phase 6)
+scripts/29..32             embed frames and crops -> search eval -> search server -> by-eye gallery (Phase 4)
 requirements-pi.txt        what a camera needs (numpy, Pillow, PyYAML, onnxruntime; OpenCV for video)
 dashboard/server           review API: Node.js, TypeScript, Express, SQLite
 dashboard/web              review UI: React, TypeScript, Vite
@@ -854,3 +963,4 @@ reports/phase1..6/          generated results and screenshots (committed)
 - Leopard ID 2022, CDLA-Permissive-1.0, Wild Me and Botswana Predator Conservation Trust, via LILA BC.
 - LeopardID102, CC BY-NC-SA 4.0, via Hugging Face (WildCAT-Datasets). Non-commercial; images are not in this repo.
 - DINOv2 (Meta) via timm; SpeciesNet (Google) weights from Addax Data Science.
+- BioCLIP 2 (Imageomics, MIT) and OpenAI CLIP ViT-B/16 (timm copy, Apache-2.0) via open_clip.

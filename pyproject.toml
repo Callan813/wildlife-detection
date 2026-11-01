@@ -25,6 +25,8 @@ detect = ["PytorchWildlife>=1.3", "soundfile", "librosa", "onnx2torch"]  # onnx2
 # Phase 6 on the laptop: export to ONNX, quantise, evaluate, benchmark. A camera needs far
 # less: see requirements-pi.txt.
 edge = ["onnx", "onnxruntime", "opencv-python-headless", "psutil"]
+# Phase 4: BioCLIP 2 / CLIP embeddings and the search server (torch comes with "detect").
+search = ["open_clip_torch"]
 dev = ["pytest", "ruff"]
 
 [tool.setuptools.packages.find]
