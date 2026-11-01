@@ -137,6 +137,28 @@ button:disabled { opacity: 0.55; cursor: default; }
 .candidate-meta { display: flex; gap: 0.4rem; align-items: center; padding: 0.4rem; font-size: 0.85rem; }
 .candidate-meta .sim { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+/* search */
+.search-bar { display: flex; gap: 0.5rem; }
+.search-bar input {
+  flex: 1; min-width: 0; padding: 0.55rem 0.8rem; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+}
+.examples, .reading { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.75rem 0; color: var(--muted); }
+.chip { padding: 0.1rem 0.55rem; border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 0.85rem; }
+.chip.meaning { background: var(--warn-soft); }
+:where(button.chip-button) { padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.85rem; }
+.results {
+  list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.result { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.result-frame { position: relative; display: block; background: #000; }
+.result-frame img { display: block; width: 100%; height: auto; }
+.frame-tag.night { left: auto; right: 0.5rem; background: #2b3550; color: #e6e9f6; }
+.result-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; align-items: baseline; padding: 0.5rem 0.6rem; }
+.result-where { flex-basis: 100%; font-size: 0.8rem; }
+:where(button.similar) { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+
 /* stats */
 .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; }
@@ -151,6 +173,9 @@ button:disabled { opacity: 0.55; cursor: default; }
 .footnote { grid-column: 1 / -1; color: var(--muted); font-size: 0.8rem; margin: 0; }
 
 @media (max-width: 760px) {
+  header { gap: 0.5rem 1rem; }
+  header h1 { flex-basis: 100%; }
+  nav { flex-wrap: wrap; }
   main { padding: 0.75rem 16px; }
   .review, .reid-query, .stats { grid-template-columns: minmax(0, 1fr); }
   .candidates { grid-template-columns: repeat(2, minmax(0, 1fr)); }

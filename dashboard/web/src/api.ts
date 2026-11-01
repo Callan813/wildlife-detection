@@ -78,6 +78,43 @@ export interface Stats {
   };
 }
 
+export interface ParsedQuery {
+  text: string;
+  species: string[];
+  time: "night" | "day" | null;
+  empty: boolean;
+  animal: boolean;
+  min_count: number;
+  cameras: string[];
+  years: number[];
+  months: number[];
+  rest: string; // the words left for the image embeddings
+  ranked_by: string;
+}
+
+export interface SearchResult {
+  event: string; // trigger event (seq_key)
+  location: string;
+  start: string;
+  night: boolean;
+  frames: number;
+  score: number;
+  p_animal: number;
+  species: string | null; // null when the event looks empty
+  species_prob: number;
+  n_boxes: number;
+  image_id: string;
+  frame_url: string;
+  crop_url: string | null;
+  bbox: [number, number, number, number] | null; // the box that matched, on frame_url
+}
+
+export interface SearchResponse {
+  query: ParsedQuery;
+  matches: number;
+  results: SearchResult[];
+}
+
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -103,6 +140,9 @@ export const api = {
   reidItem: (id: number) => call<ReidItem>(`/api/reid/items/${id}`),
   reviewReid: (id: number, decision: "match" | "new" | "unsure", reviewer: string, leopard?: string) =>
     post(`/api/reid/${id}/review`, { decision, leopard, reviewer }),
+  search: (q: string, k = 24) => call<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}&k=${k}`),
+  similar: (event: string, k = 24) =>
+    call<SearchResponse>(`/api/similar?event=${encodeURIComponent(event)}&k=${k}`),
 };
 
 // Leopard ids are UUIDs; reviewers only need enough to tell them apart.

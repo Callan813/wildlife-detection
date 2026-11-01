@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -182,5 +184,54 @@ describe("images", () => {
     await request(app).get("/images/burst/11").expect(200);
     await request(app).get("/images/burst/15").expect(404); // path points outside data/
     await request(app).get("/images/burst/99").expect(404);
+  });
+});
+
+describe("search", () => {
+  // Stands in for scripts/31_search_server.py and records what it was asked.
+  let upstream: http.Server;
+  let seen: string[];
+  let searchUrl: string;
+
+  beforeEach(async () => {
+    seen = [];
+    upstream = http.createServer((req, res) => {
+      seen.push(req.url ?? "");
+      if (req.url?.startsWith("/images/")) {
+        res.writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "max-age=86400" }).end("jpeg");
+      } else {
+        res.writeHead(req.url?.includes("bad") ? 404 : 200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ results: [], url: req.url }));
+      }
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    searchUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+  });
+
+  afterEach(() => new Promise<void>((resolve) => upstream.close(() => resolve())));
+
+  it("forwards queries and passes the status on", async () => {
+    const a = createApp({ db, repoRoot: root, searchUrl });
+    const res = await request(a).get("/api/search?q=civet%20at%20night&k=5").expect(200);
+    expect(res.body.url).toBe("/api/search?q=civet%20at%20night&k=5");
+    await request(a).get("/api/similar?event=bad").expect(404);
+    expect(seen).toEqual(["/api/search?q=civet%20at%20night&k=5", "/api/similar?event=bad"]);
+  });
+
+  it("forwards images with their type and cache header, and checks the path", async () => {
+    const a = createApp({ db, repoRoot: root, searchUrl });
+    const res = await request(a).get("/images/search/crop/abc-1_0").expect(200);
+    expect(res.headers["content-type"]).toBe("image/jpeg");
+    expect(res.headers["cache-control"]).toBe("max-age=86400");
+    await request(a).get("/images/search/other/abc").expect(400);
+    await request(a).get("/images/search/frame/..%2F..%2Fsecret").expect(400);
+    expect(seen).toEqual(["/images/search/crop/abc-1_0"]);
+  });
+
+  it("answers 503 when the search server is down or not configured", async () => {
+    const down = createApp({ db, repoRoot: root, searchUrl: "http://127.0.0.1:9" });
+    const res = await request(down).get("/api/search?q=civet").expect(503);
+    expect(res.body.error).toMatch(/31_search_server/);
+    await request(app).get("/api/search?q=civet").expect(503);
   });
 });

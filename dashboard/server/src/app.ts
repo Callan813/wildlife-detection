@@ -12,6 +12,8 @@
 //   GET  /images/:kind/:cropId        crop image (kind = species | reid)
 //   GET  /images/frame/:id            full camera frame for species item :id
 //   GET  /images/burst/:frameId       another frame of the same trigger burst (ids from the queue)
+//   GET  /api/search?q=…, /api/similar?event=…, /images/search/*
+//                                     plain-English search, forwarded to scripts/31_search_server.py
 
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -24,6 +26,7 @@ import { calibrate } from "./threshold.js";
 export interface AppOptions {
   db: DatabaseSync;
   repoRoot: string; // image folders in meta are relative to this
+  searchUrl?: string; // scripts/31_search_server.py; search answers 503 without it
 }
 
 const limitQuery = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20) });
@@ -48,7 +51,7 @@ class HttpError extends Error {
   }
 }
 
-export function createApp({ db, repoRoot }: AppOptions) {
+export function createApp({ db, repoRoot, searchUrl }: AppOptions) {
   const app = express();
   app.use(express.json());
   const m = meta(db);
@@ -180,6 +183,34 @@ export function createApp({ db, repoRoot }: AppOptions) {
   // ---- stats ----
   app.get("/api/stats", (_req, res) => {
     res.json(stats(db, startThreshold));
+  });
+
+  // ---- search ----
+  // The search server holds the text model and the embeddings; this only passes requests on,
+  // so the browser talks to one origin. Paths are fixed and only the query string is forwarded.
+  const forward = (target: string) => async (req: Request, res: Response) => {
+    if (!searchUrl) throw new HttpError(503, "search isn't set up (SEARCH_URL)");
+    const qs = req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : "";
+    let upstream: globalThis.Response;
+    try {
+      upstream = await fetch(new URL(target + qs, searchUrl), { signal: AbortSignal.timeout(30_000) });
+    } catch {
+      throw new HttpError(503, "the search server isn't running: python scripts/31_search_server.py");
+    }
+    res.status(upstream.status);
+    const type = upstream.headers.get("content-type");
+    if (type) res.type(type);
+    const cache = upstream.headers.get("cache-control");
+    if (cache) res.set("Cache-Control", cache);
+    res.send(Buffer.from(await upstream.arrayBuffer()));
+  };
+  const searchImage = z.object({ kind: z.enum(["frame", "crop"]), key: z.string().regex(/^[\w.-]+$/) });
+
+  app.get("/api/search", forward("/api/search"));
+  app.get("/api/similar", forward("/api/similar"));
+  app.get("/images/search/:kind/:key", (req, res) => {
+    const { kind, key } = searchImage.parse(req.params);
+    return forward(`/images/search/${kind}/${encodeURIComponent(key)}`)(req, res);
   });
 
   // ---- images ----

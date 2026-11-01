@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { api, type Meta } from "./api";
 import { ReidReview } from "./ReidReview";
+import { SearchView } from "./SearchView";
 import { SpeciesReview } from "./SpeciesReview";
 import { StatsView } from "./StatsView";
 
-type Tab = "species" | "leopards" | "stats";
+type Tab = "species" | "leopards" | "search" | "stats";
 const TABS: { id: Tab; name: string }[] = [
   { id: "species", name: "Species" },
   { id: "leopards", name: "Leopards" },
+  { id: "search", name: "Search" },
   { id: "stats", name: "Stats" },
 ];
 
@@ -63,12 +65,14 @@ export function App() {
       </header>
 
       <main>
-        {!reviewer.trim() && tab !== "stats" ? (
+        {!reviewer.trim() && tab !== "stats" && tab !== "search" ? (
           <p className="empty">Enter your name at the top right to start reviewing.</p>
         ) : tab === "species" ? (
           <SpeciesReview reviewer={reviewer.trim()} />
         ) : tab === "leopards" ? (
           <ReidReview reviewer={reviewer.trim()} threshold={meta?.new_threshold ?? 0.5} />
+        ) : tab === "search" ? (
+          <SearchView />
         ) : (
           <StatsView />
         )}

@@ -1,5 +1,5 @@
 // Start the review API. Run from dashboard/server:
-//   npm run dev          (REVIEW_DB and REPO_ROOT default to this repo's layout)
+//   npm run dev          (REVIEW_DB, REPO_ROOT and SEARCH_URL default to this repo's layout)
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,8 +10,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.REPO_ROOT ?? path.resolve(here, "../../..");
 const dbPath = process.env.REVIEW_DB ?? path.join(repoRoot, "outputs/phase5/review.db");
 const port = Number(process.env.PORT ?? 4317);
+const searchUrl = process.env.SEARCH_URL ?? "http://127.0.0.1:4318";
 
-const app = createApp({ db: openDb(dbPath), repoRoot });
+const app = createApp({ db: openDb(dbPath), repoRoot, searchUrl });
 // Express 5 passes listen errors (e.g. port in use) to the callback instead of throwing.
 app.listen(port, "127.0.0.1", (err?: Error) => {
   if (err) {
