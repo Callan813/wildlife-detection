@@ -1,25 +1,23 @@
 # Ghats Wildlife AI
 
-Camera-trap intelligence for the Western Ghats: find the animals in thousands of
-trigger images, identify the species, recognise individual leopards, search the
-archive in plain English, and run it all on a low-power device in the forest.
+Camera-trap image analysis for the Western Ghats: detect animals, filter empty
+triggers, classify species groups, search an archive, and review predictions in a dashboard.
+An ONNX pipeline processes photos, video and webcam input, with performance measured
+on a laptop CPU.
 
-Forest departments and researchers in Goa (Mhadei, Bhagwan Mahavir, Cotigao,
-Netravali) collect far more camera-trap images than anyone can review by hand,
-and most frames are empty, triggered by wind, sun or moving leaves. This project
-builds the pipeline that does the first pass automatically and sends people only
-what needs a human decision.
+The project uses public tropical Asian camera-trap images as a stand-in for local
+conditions. It has not been evaluated on Western Ghats field data or deployed on
+camera-trap hardware.
 
-## Roadmap
+## Implemented features
 
-| Phase | What | Status |
-|---|---|---|
-| 1 | Animal detection and empty-frame filtering (MegaDetector V6) | **Done** (results below) |
-| 2 | Species classification for Ghats groups, location-split evaluation, SpeciesNet baseline | **Done** (results below) |
-| 3 | Leopard re-identification (metric learning + travel-feasibility prior) | **Done**; travel prior tested on a second dataset (LeopardID102) |
-| 4 | Search the photos in plain English (filters + BioCLIP 2 embeddings), in the dashboard | **Done** (results below) |
-| 5 | Reviewer dashboard with an active-learning loop | **Done**: review + audit sample + threshold re-tuning; retraining from reviews not yet |
-| 6 | Edge deployment: ONNX/INT8 camera pipeline (photos, video, webcam), cascade design, bandwidth, benchmarks | **Done** on a laptop CPU standing in for a Pi; no Pi/Jetson numbers yet |
+| Component | Implementation |
+|---|---|
+| Detection | MegaDetector V6, event-level evaluation and empty-frame filtering |
+| Species classification | ConvNeXt-Tiny and a frozen SpeciesNet backbone with a trained classification head; evaluation split by camera |
+| Archive search | Species and metadata filters, BioCLIP 2 embeddings, and dashboard search |
+| Human review | Species review queue, saved corrections, random audit sampling and review statistics |
+| ONNX pipeline | Model export, quantisation experiments, photo/video/webcam processing, bandwidth estimates and laptop CPU benchmarks |
 
 ## Phase 1: detection and empty-frame filtering
 
@@ -276,312 +274,6 @@ temperature scaling (better calibrated probabilities, same ranking, so the same
 filtering), and turning off label smoothing (slightly higher F1, filtering within noise:
 150 empty test events give about ±6 points).
 
-## Phase 3: leopard re-identification
-
-**Question:** given a photo of a leopard, can the system find other photos of the same
-individual from its spot pattern? That is how survey teams count leopards and track
-them across cameras.
-
-**Data:** [Leopard ID 2022](https://lila.science/datasets/leopard-id-2022/) (Wild Me and
-Botswana Predator Conservation Trust, via LILA BC): 6,795 photos of 430 named African
-leopards, with boxes and a viewpoint label per animal. They're not Indian leopards, but
-it's the same species and the same spot-matching problem. I keep only left and right flank
-views (4,502 crops), because front and back views show different spots.
-
-```bash
-python scripts/12_leopard_crops.py   # crops + split by individual (needs the 8 GB download, see configs/phase3.yaml)
-python scripts/13_reid_baseline.py   # off-the-shelf embeddings, retrieval metrics
-```
-
-**How it's evaluated** ([`src/ghats/reid.py`](src/ghats/reid.py)):
-
-- **Split by individual.** Test leopards (107 of them, 1,361 crops) are never used for
-  training or tuning. Same idea as splitting by camera in Phase 2.
-- **No same-encounter matches.** Photos from one sighting are near-duplicates, so matching
-  them says nothing about recognising the leopard weeks later; they're removed from the
-  ranking. The dataset has no timestamps, so an encounter is a run of consecutive image ids
-  showing the same leopard. That's a proxy, so I also report how many correct matches come
-  from images within 10 ids of the query (16% here).
-- **Same flank only.** A left-side photo can only be matched by another left-side photo.
-- **Averaged per leopard.** A few leopards were photographed 100+ times. Averaged per query,
-  they dominate: SpeciesNet's top-1 is 62.5% per query but 36.7% per leopard. Like macro F1
-  in Phase 2, the per-leopard number is the headline.
-
-### Baseline: off-the-shelf features, no training
-
-Every crop is embedded, then each test crop is a query against all the other test crops.
-
-| Model | Top-1 | Top-5 | mAP | Val top-1 |
-|---|---|---|---|---|
-| DINOv2 ViT-B/14 (general-purpose) | 26.7% | 37.3% | 22.2% | 30.0% |
-| DINOv2 ViT-S/14 | 29.6% | 38.4% | 22.7% | 28.9% |
-| SpeciesNet backbone (camera-trap species classifier) | 36.7% | 47.0% | 25.9% | 27.9% |
-
-None of these models was trained to tell individuals apart, and it shows: the right leopard
-comes first about a third of the time. SpeciesNet leads on test but not on val, so with ~100
-leopards per split there is no clear winner yet. Full numbers in
-[`reid_baseline.md`](reports/phase3/reid_baseline.md).
-
-### Fine-tuned with ArcFace
-
-```bash
-python scripts/14_train_reid.py      # DINOv2-S + ArcFace on the train leopards, ~65 s/epoch on an RTX 3050
-```
-
-ArcFace trains the embedding so photos of one leopard sit close together and other
-leopards are pushed a fixed angle away. Choices that matter here:
-
-- **A class is one leopard's flank**, not one leopard (355 flanks from 209 leopards).
-  The left and right sides have different spots, so they shouldn't be pulled together.
-- **No horizontal flips.** The usual augmentation would turn a left flank into a right
-  flank that doesn't exist. Instead: random crops, colour jitter, and random grayscale,
-  since night photos are infrared.
-- **DINOv2-S, fully fine-tuned**, input 224×448 (flank crops are wide), 20 epochs, the
-  best epoch picked on val leopards.
-
-| Test, 107 unseen leopards | Top-1 | Top-5 | Top-10 | mAP |
-|---|---|---|---|---|
-| DINOv2-S, untrained (same input size) | 28.4% | 39.7% | 44.3% | 22.8% |
-| SpeciesNet backbone, untrained (best baseline) | 36.7% | 47.0% | 50.4% | 25.9% |
-| **DINOv2-S + ArcFace** | **40.2%** | **57.1%** | **64.5%** | **35.4%** |
-
-Fine-tuning lifts every metric. The clearest gain is in the shortlist: the right leopard is
-in the top 5 for 57% of leopards, up from 40%. Top-1 beats the best baseline by only 3.5
-points, which is within the noise of ~100 test leopards (about ±5 points); top-5 and mAP
-gain 10 points each, which is not. The training loss reached almost zero by epoch 10 while
-val top-1 stayed at 35–39%, so with 2,450 training photos the model memorises the training
-leopards faster than it learns general spot matching. More leopards would help more than
-more epochs. Details in [`reid_finetune.md`](reports/phase3/reid_finetune.md). (Tested
-below: adding 101 leopards from another dataset lifts top-1 by about 10 points.)
-
-In practice that makes this a ranking tool, not an automatic identifier: show a reviewer
-the top 5 or 10 candidates and let them confirm, which is the Phase 5 dashboard.
-
-### Recognising new leopards (open set)
-
-```bash
-python scripts/15_open_set.py        # "new individual" threshold, simulated on unseen leopards
-```
-
-Plain retrieval always returns the closest leopard, even for an animal that's not in the
-catalogue. Real surveys meet new leopards all the time, so the system needs to be able to
-answer "new": if the best match is less similar than a threshold, call it new.
-
-To test that, I hide a random half of the test leopards from the gallery, so their photos
-should come back "new", and repeat it over 20 random draws. The threshold is picked on val
-leopards and applied unchanged to test.
-
-![open-set trade-off](reports/phase3/open_set.png)
-
-| Test, 107 unseen leopards | Known leopards identified | New leopards flagged |
-|---|---|---|
-| ArcFace, no "new" option | 46.6% | 0% |
-| ArcFace, strict threshold (keep 90% of identifications on val) | 44.8% | 24.2% |
-| ArcFace, best-balance threshold | 29.3% | 94.5% |
-| SpeciesNet untrained, best-balance threshold | 13.0% | 94.8% |
-
-The fine-tuned model is better along the whole curve: AUROC 0.778 for telling known from
-new leopards by similarity, against 0.700 for the untrained baseline. The threshold is the
-weak point. The strict rule was tuned on val to keep 90% of identifications. On test it
-kept 96% and flagged only 24% of new leopards, while the test curve shows about 55% was
-possible at a similar cost. Similarity levels shift between groups of leopards, so a
-threshold tuned on one population doesn't transfer exactly. A deployment in the Ghats
-would need to recalibrate on its own labelled photos, and in a reviewer-in-the-loop setup
-that calibration comes for free as reviewers confirm or reject matches.
-
-**With more training leopards.** I reran this on the same draws with the two models
-trained with LeopardID102 leopards added (see below). The plot above includes them.
-
-| Test, 107 unseen leopards | No "new" option | Strict threshold (known / new) | Best balance (known / new) | AUROC |
-|---|---|---|---|---|
-| ArcFace, original | 46.6% | 44.8% / 24.2% | 29.3% / 94.5% | 0.778 |
-| ArcFace + LeopardID102, seed 0 | 56.1% | 50.6% / 45.9% | 43.8% / 78.9% | 0.798 |
-| ArcFace + LeopardID102, seed 1 | 58.3% | 54.4% / 35.0% | 38.4% / 92.7% | 0.800 |
-
-Both new curves sit above the original everywhere. At any rate of flagging new
-leopards, more known leopards get identified: at about 80% flagged, roughly 43% instead
-of 36%. But the gain comes from somewhere specific. AUROC, which measures how well the
-best-match similarity alone separates known from new leopards, barely moves (0.778 to
-about 0.80, likely within noise). What improved is ranking: the right leopard comes
-first more often (46.6% to 56–58% with no "new" option), and that lifts the whole curve.
-The model is better at saying *which* leopard; it isn't much better at knowing when it
-doesn't know.
-
-The threshold problem is still there. The two seeds land on quite different operating
-points from the same rules (best balance: 43.8% / 78.9% vs 38.4% / 92.7%), so a fixed
-threshold remains fragile, and local recalibration from reviewer feedback still matters.
-
-**The travel-feasibility prior** needs camera locations and times, and Leopard ID 2022
-has neither (no timestamps, GPS or EXIF). It's tested on LeopardID102 below.
-
-### A second leopard dataset: LeopardID102
-
-Every Phase 3 number above comes from one survey in Botswana. To see whether the model
-holds up on leopards from a different survey, and to get the timestamps and camera
-positions the travel prior needs, I'm adding
-[LeopardID102](https://huggingface.co/datasets/WildCAT-Datasets/LeopardID102)
-(CC BY-NC-SA 4.0): 717 camera-trap photos of 101 named leopards from a 2021 survey in
-Zimbabwe, plus 148 unidentified ones. (The name says 102; the release has 101 named
-folders.) The capture time and camera are in each file name, and `locations.csv` gives
-the 105 camera positions.
-
-```bash
-python scripts/16_leopard102_manifest.py   # list images, parse camera + time from file names
-python scripts/02_run_detector.py --manifest data/leopard102/manifest.csv \
-    --out outputs/phase3/leopard102/detections.jsonl
-python scripts/17_leopard102_crops.py      # top MegaDetector box per image -> crops, real encounters
-python scripts/18_flank_classifier.py      # left/right flank labels, trained on Leopard ID 2022
-python scripts/19_leopard102_zero_shot.py  # Phase 3 model on these leopards, no retraining
-python scripts/14_train_reid.py --leopard102 --out outputs/phase3/reid_lp102_s0 --tag _lp102_s0  # add to training
-python scripts/20_compare_reid.py          # same test leopards, paired bootstrap, two seeds each
-python scripts/21_travel_prior.py          # rule out matches by camera distance and time
-```
-
-It needed three things Leopard ID 2022 came with:
-
-- **Boxes.** It ships full frames only, so MegaDetector finds the leopard. It puts a box
-  scoring 0.2 or more on 97.8% of the named photos (701 of 717), and no leopard loses all
-  of its photos. The leopards are small: the median box covers 8% of the frame.
-- **Encounters.** Here they come from real timestamps: one leopard at one camera with no
-  gap over 30 minutes (`ghats.reid.time_encounters`), instead of the image-id proxy
-  above. That gives 367 encounters; 67 leopards appear in two or more, so only they can
-  be queries.
-- **Flank labels.** Re-ID only compares left with left and right with right, and this
-  dataset has no viewpoint labels. So I trained a left/right classifier on Leopard ID
-  2022's labels (frozen DINOv2-S features + logistic regression) and applied it here.
-
-**The flank classifier.** DINOv2 was pretrained with random horizontal flips, so its
-summary (CLS) token is partly blind to which way an animal faces. That's exactly the
-thing this classifier needs. I add the difference between the mean patch features of the
-left and right halves of the crop, which do keep position. On unseen Leopard ID 2022
-leopards it gets **93.8%** (picked on val leopards). The patch-difference features win
-on val (93.1% vs 91.9%) and tie on test. With no labels on LeopardID102, I checked it
-two ways ([`flank.md`](reports/phase3/flank.md)):
-
-- **By eye**, on 40 random crops (the script draws them into `reports/phase3/flank_check.jpg`; not
-  committed, since the photos are under a non-commercial licence; the picks are in
-  [`flank_check.csv`](reports/phase3/flank_check.csv)):
-  36 clearly right, none clearly wrong, 4 I couldn't call myself (nearly black, a
-  washed-out close-up with no head, a dark partial view, one facing the camera).
-- **a/b frames.** Some files come in pairs ending `a` and `b` with the same camera and
-  second. I first took these as two cameras facing each other across a path, which would
-  show opposite flanks. The classifier said "same side" for 72 of 73 pairs. Looking at
-  them settled it: they're two shots of the same moment from the same side, sometimes one
-  zoomed in. So that's a consistency check, not an accuracy measure.
-
-One gap: Leopard ID 2022 crops include only left and right views, so the classifier
-always picks a side, even for a leopard walking straight at the camera. Those crops get
-a label that means little. They're a small share here because the cameras are set beside
-trails.
-
-**Does the model work on leopards from another survey?** I ran the ArcFace model,
-trained only on Botswana leopards, on these Zimbabwe leopards with no retraining
-(`python scripts/19_leopard102_zero_shot.py`). It's scored the same way as above, with
-the 34 leopards that have only one encounter left in as distractors.
-
-| LeopardID102, 67 query leopards | Top-1 | Top-5 | Top-10 | mAP |
-|---|---|---|---|---|
-| DINOv2-S, untrained | 21.4% | 31.1% | 41.2% | 14.3% |
-| DINOv2-S + ArcFace (Leopard ID 2022) | 59.6% | 70.7% | 76.1% | 51.5% |
-| DINOv2-S, untrained, match must be at another camera | 4.9% | 13.6% | 20.6% | 6.2% |
-| **DINOv2-S + ArcFace, match must be at another camera** | **42.7%** | **59.1%** | **64.5%** | **40.1%** |
-| *For reference: ArcFace on its own test set (Botswana)* | *40.2%* | *57.1%* | *64.5%* | *35.4%* |
-
-A model doing better on foreign data (59.6%) than on its own test set (40.2%) needs
-explaining before it's believed, so I checked where the correct matches come from.
-They aren't near-duplicates: only 3% are from the same day, and the median gap is 14
-days. But 66% are from the query's own camera, a different visit with the same
-background and angle. Requiring the match to come from a *different* camera drops
-top-1 to 42.7%, in line with the home test set. That's the honest number for following
-a leopard between cameras.
-
-The untrained row tells the rest of the story. Off-the-shelf DINOv2 gets 21.4% overall
-but only 4.9% across cameras, so it was mostly matching backgrounds. The fine-tuned model
-keeps 42.7% across cameras, so what it learned on Botswana leopards is the spots, and
-that carries over to another country's leopards and cameras without retraining.
-
-Smaller results, each within the noise (about ±6 points with 67 leopards): night queries
-(68% of photos) score no worse than day ones, and dropping the flank rule costs about 4
-points of top-1 and 20 points of mAP. Full numbers in
-[`leopard102_zero_shot.md`](reports/phase3/leopard102_zero_shot.md).
-
-**Do more training leopards help?** The fine-tuned model memorised its 209 training
-leopards, so the obvious fix is more leopards. I added all 101 LeopardID102 leopards to
-training (310 leopards, 3,151 crops) and kept everything else the same, including the
-Botswana val and test leopards, so the test numbers compare directly
-(`python scripts/14_train_reid.py --leopard102 ...`, then `scripts/20_compare_reid.py`).
-
-There are two kinds of luck to rule out. One is which leopards happen to be in the test
-set. A paired bootstrap handles that: every model is scored on the same 107 leopards, so
-I resample the leopards and see how much the difference moves. The other is training
-randomness, which the bootstrap can't see. So I trained each setup twice with different
-seeds.
-
-| Test, 107 Botswana leopards | Top-1 | Top-5 | Top-10 | mAP |
-|---|---|---|---|---|
-| Leopard ID 2022 only, seed 0 | 40.2% | 57.1% | 64.5% | 35.4% |
-| Leopard ID 2022 only, seed 1 | 40.5% | 54.4% | 62.0% | 35.7% |
-| + LeopardID102, seed 0 | 50.2% | 66.3% | 71.5% | 43.1% |
-| **+ LeopardID102, seed 1** | **53.3%** | **66.1%** | **72.3%** | **44.5%** |
-
-| Change in top-1 (95% interval over test leopards) | |
-|---|---|
-| New seed, same data | +0.3 (−4.9 to +5.6) |
-| Add LeopardID102, seed 0 | +10.1 (+2.1 to +18.5) |
-| Add LeopardID102, seed 1 | +12.8 (+3.5 to +22.3) |
-
-Changing the seed does nothing measurable, and adding the leopards gains 10–13 points
-with both intervals above zero. Top-5 and top-10 agree
-([`reid_compare.md`](reports/phase3/reid_compare.md)). The memorising eased too: the
-final training loss is about 0.9 instead of 0.05. Three caveats:
-
-- **The size of the gain is loose.** The intervals run from about +2 to +20, so "about
-  10 points" is honest and "exactly 12" isn't.
-- **I can't separate "more leopards" from "different leopards".** The new ones come
-  from another country, other cameras and night-heavy footage, so the gain may partly be
-  from variety rather than numbers. A clean test would add the same number of leopards
-  from the same survey, and there aren't any spare.
-- **These models have trained on LeopardID102,** so they can't be tested on it. The
-  zero-shot and travel-prior results above use the model that never saw it.
-
-**Where and when: the travel prior.** LeopardID102 gives every photo a time and a camera
-position in km (cameras about 3.7 km apart, survey area about 68 km across). That allows
-ruling out candidates before looking at spots
-(`python scripts/21_travel_prior.py`, [`travel_prior.md`](reports/phase3/travel_prior.md)):
-
-- **Speed rule:** no match that would need the leopard to average more than 3 km/h
-  between the two cameras. Set loose on purpose, not tuned.
-- **Distance rule:** no match between cameras more than D km apart, since leopards keep to
-  home ranges. D can't be chosen on the leopards it's scored on, so the query leopards
-  are split in half: D is picked on one half and scored on the other, then swapped,
-  over 20 random splits. It picked 7.5 km almost every time.
-
-| LeopardID102, ArcFace model (no retraining) | Top-1 | Top-5 | Top-10 | mAP |
-|---|---|---|---|---|
-| Appearance only, match at another camera | 42.8% | 59.3% | 64.6% | 40.6% |
-| + speed rule | 42.8% | 59.4% | 64.6% | 40.7% |
-| **+ speed + distance rule** | **53.9%** | **76.3%** | **83.0%** | **56.5%** |
-
-The speed rule does nothing here. It removes 1.2% of candidates and never a true match,
-because re-sightings are days or weeks apart (median 14 days), and in that time a leopard
-could be anywhere in the survey. It would only matter for photos minutes or hours apart.
-
-The distance rule is where the gain is. It removes 90% of the candidates, and the right
-leopard is in the top 10 for 83% of leopards instead of 65%. But it isn't free:
-
-- **It rules out some true matches.** At 7.5 km, 746 of 8,630 same-leopard pairs (8.6%)
-  are further apart than that. A leopard that wanders further than usual becomes
-  impossible to match, and the error is silent.
-- **The cutoff belongs to this survey.** Home range size depends on the sex, the habitat
-  and how much prey there is, so 7.5 km from Zimbabwe says little about the Ghats. A
-  Ghats survey would have to set its own from confirmed re-sightings.
-- **Survey size matters.** In a 68 km survey most leopards are far from any one camera,
-  so a distance rule removes a lot. In a small survey it would remove little.
-
-So in a real system I'd use distance to *sort* the shortlist (nearby candidates first)
-rather than hide anything, and let the reviewer widen the search. That fits the Phase 5
-reviewer dashboard.
-
 ## Phase 4: search in plain English
 
 **Question:** can someone type "civets at night" or "animal drinking water" and get the
@@ -678,124 +370,63 @@ only). Each result shows the frame and box that matched, the species model's gue
 and time, and a **More like this** button that searches with that event's best crop.
 `?tab=search&q=...` opens a search directly, so a search can be shared as a link.
 
-### Not done
+### Search limitations
 
-- **Qdrant / a vector database.** The plan named one, but 13k vectors is a 20 MB numpy
-  array and a search is one matrix product. A real archive (millions of frames) would need it.
-- **Behaviour.** The embeddings can't do "drinking" or "climbing". That needs either a
-  model trained on behaviour labels or short-clip models on video. Neither is in reach with SWG's labels.
-- **A "no good match" answer** for text-only queries. Setting a similarity cut-off needs
-  labelled queries.
-- **Counting** relies on detector boxes >= 0.2 in one frame, which sometimes counts one pig twice.
+Behaviour queries such as "drinking" and "climbing" were unreliable in the manual
+review. Text-only queries always return a ranking, even when no relevant animal is
+present. Counts are based on detector boxes and can count one animal twice.
+The index is stored in numpy arrays.
 
 ## Phase 5: reviewer dashboard
 
-**Question:** the models are good at ranking but not sure enough to act alone. Species
-accuracy is about 71% per crop, and the right leopard is first about half the time. So
-how should people and models share the work?
-
-The answer is a review tool that shows people what the models are least sure about,
-records their decisions, and uses those decisions to measure and re-tune the models.
+The dashboard helps a person check species predictions and records their decisions
+in SQLite. It uses a Python prediction export, an Express + TypeScript API, and a
+React + TypeScript UI.
 
 ![species review](reports/phase5/dashboard_species.png)
 
-**How it's built:**
-
-- **Python stays the ML side.** [`scripts/22_export_review.py`](scripts/22_export_review.py)
-  writes model outputs into a SQLite file: species probabilities for the 3,882 Phase 2
-  test crops, and a top-5 shortlist for each leopard photo from the best Phase 3 model.
-- **A Node.js + TypeScript API** ([`dashboard/server`](dashboard/server), Express,
-  zod validation, Node's built-in SQLite) serves the queues and images and records
-  decisions in its own tables, so re-exporting predictions never wipes reviews.
-- **A React + TypeScript UI** ([`dashboard/web`](dashboard/web), Vite) has a species
-  screen, a leopard screen and a stats screen, with keyboard shortcuts for speed.
+The species queue presents crops with the smallest gap between the top two predictions
+first. Reviewers can inspect the full frame, detection box, close-up and nearby burst
+frames, then choose a species or mark the item unsure. Keyboard shortcuts support
+quick review. A random audit sample is mixed into the queue so statistics do not rely
+only on the hardest examples.
 
 ```bash
-python scripts/22_export_review.py   # model outputs -> outputs/phase5/review.db
-cd dashboard && npm install
-npm run dev:api                      # API on http://127.0.0.1:4317
-npm run dev:web                      # UI on http://localhost:5317 (second terminal)
-npm test                             # API tests (vitest + supertest)
+python scripts/22_export_review.py   # requires existing model outputs and configured assets
+cd dashboard
+npm install
+npm run dev:api                      # http://127.0.0.1:4317
+npm run dev:web                      # http://localhost:5317, in a second terminal
+npm test                             # API tests
 ```
 
-**Species review.** Crops come least certain first (smallest gap between the top two
-guesses). The reviewer sees the whole camera frame with the box drawn on it, plus a
-close-up. A box often covers a few dozen pixels of a night photo, and a crop that small
-is too little for a person to judge, as the screenshot shows. One keypress accepts one
-of the model's top three; a menu covers the rest.
+The Search tab also requires `scripts/31_search_server.py` to be running.
+Reviews are saved separately from model predictions. Corrections do not automatically
+retrain the species model; this is a review workflow rather than an automated
+active-learning loop.
 
-**Leopard review.** This simulates a survey in progress. Half the test leopards are
-already in the catalogue, each from its first sighting. Every later photo is a review
-item, shown next to its top 5 catalogued leopards (same flank) and a "new leopard"
-suggestion when the best match is below the threshold.
+## Phase 6: ONNX pipeline and laptop benchmarks
 
-![leopard review](reports/phase5/dashboard_leopards.png)
-
-**The bias in uncertain-first review, and the fix.** I first tested the loop with a
-script playing a perfect reviewer (it answers from the dataset labels), and it showed a
-real problem. After 50 species reviews the model looked 22% accurate, against 71%
-overall. The re-tuned leopard threshold came out at a balanced accuracy of 52%, a coin
-flip. Both are the same bias. The queue shows the model's hardest cases by design, so
-measuring the model on them makes it look worse than it is. For the threshold, every
-reviewed item sat right at the old threshold (that's what "uncertain" meant), which
-says nothing about where it should move.
-
-The fix is a random **audit sample**. The export marks a random 20% of items, the queue
-slips one in after every four uncertain ones, and reviewers aren't told which is which.
-Accuracy and threshold calibration use audit items only. Simulated again (250 species
-and 300 leopard reviews):
-
-| | Uncertain items only | Random audit sample |
-|---|---|---|
-| Species model accuracy | 23% | **68%** (50 audit reviews; true overall 70.7%) |
-| Re-tuned "new leopard" threshold | 0.48, balanced accuracy 52% | **0.47**, balanced accuracy 70% (60 audit reviews) |
-
-As a check, all 243 audit items scored with the dataset labels put the best threshold
-at 0.51 (68%). So 60 reviews already get close, just with more noise.
-
-![stats](reports/phase5/dashboard_stats.png)
-
-**Why the starting threshold was wrong here.** The best-balance threshold from Phase 3
-(0.62) would suggest "new" for 92% of photos, against 66% that really are new. In the
-open-set test the gallery held every other photo of each leopard. Here the catalogue
-holds one sighting per leopard, so best-match scores run lower. That's the Phase 3
-lesson again: thresholds don't transfer, and the reviewer loop is how a real survey
-would set its own. The dashboard starts from the stricter val threshold (0.48) and
-reports the re-tuned one.
-
-**Not done yet:**
-- **Retraining from corrections.** Reviews are stored, but the models don't learn from
-  them yet.
-- **Applying the re-tuned threshold automatically.** It's reported, not used.
-- **Reviewer accounts.** The reviewer is a typed name, with no login.
-- **Distance-sorted shortlist.** The travel prior isn't in the UI, because Leopard ID
-  2022 has no camera positions.
-
-## Phase 6: running on the camera
-
-The point of all this is a camera trap that does the first pass itself: run the detector
-and the species model on the device, throw away empty triggers, and send a small crop and
-a line of text instead of every photo. I don't have a Raspberry Pi or Jetson, so this phase
-builds and measures everything on my laptop's CPU, limited to 4 threads like a Pi 5, and
-keeps the camera code to numpy, Pillow and ONNX Runtime so it runs on a Pi unchanged.
-**None of the speed numbers below are Pi numbers.**
+The pipeline runs detection and species classification locally and writes a crop
+and metadata for each kept event. Measurements below use a Ryzen 5 5600H laptop
+CPU, limited to four threads. They are not Raspberry Pi or Jetson measurements.
+The core camera code uses numpy, Pillow and ONNX Runtime.
 
 ### Run it
 
 ```bash
 pip install -e ".[edge]"
 python scripts/23_export_onnx.py        # PyTorch -> ONNX, checked against PyTorch outputs
-python scripts/24_quantize.py           # INT8 versions (only re-ID is worth it, see below)
+python scripts/24_quantize.py           # INT8 experiments; detector and species trade-offs below
 python scripts/26_live.py --source path/to/photos/     # or clip.mp4, or 0 for a webcam (--show for a window)
 python scripts/27_bandwidth.py          # data sent, Phase 2 test set
 python scripts/28_benchmark.py          # speed and memory per model
 python scripts/25_edge_eval.py --models detector species --variants fp32 int8   # accuracy, ~2 h on 4 threads
 ```
 
-On a Pi: `pip install -r requirements-pi.txt && pip install --no-deps -e .`, copy
-`detector_fp32.onnx` (or `detector_int8.onnx`), `species_fp32.onnx` and the probe head
-(`head.npz`), and run the same `26_live.py`. A test checks that the camera code imports
-with pandas, torch, scikit-learn and OpenCV all missing.
+`requirements-pi.txt` lists the minimal runtime dependencies. The pipeline needs
+exported detector and species ONNX models plus the trained species head (`head.npz`).
+A test checks that the camera code imports without pandas, torch, scikit-learn or OpenCV.
 
 ### The camera pipeline
 
@@ -858,15 +489,11 @@ as the earlier phases ([`reports/phase6/`](reports/phase6/)).
 | | empties removed at 90% recall | 66.2% | 66.2% | **58.5%** | |
 | | recall at the FP32 threshold, unchanged | 90.0% | 89.8% | 89.0% | |
 | Species (Phase 2, 2,338 crops) | macro F1 | 0.887 | 0.887 | **0.039** | 201 -> 55 MB |
-| Re-ID (Leopard ID 2022 test) | top-1 per leopard | 53.3% | 52.9% | 52.3% | 84 -> 23 MB |
-| | top-5 per leopard | 66.1% | 66.1% | 63.3% | |
 
 The FP32 exports match PyTorch (the detector's event scores move by at most 0.013 with the
-numpy post-processing; re-ID's 53.3 vs 52.9 is the GPU reference running in FP16). INT8 is
+numpy post-processing). INT8 is
 a mixed result:
 
-- **Re-ID** quantises fine: dynamic INT8 on the ViT's matrix multiplies loses under a point
-  of top-1 and every embedding stays within cosine 0.98 of the original.
 - **Detector**: INT8 costs 8 points of filtering at the same recall (58.5% vs 66.2% of
   empty events removed), and 22% of events see their score move by more than 0.05, so a
   threshold tuned on FP32 doesn't carry over cleanly. On this x86 laptop it is also slower
@@ -901,57 +528,28 @@ convolutions quantised worst, 14-17 dB), and percentile calibration on train-cam
 | Detector FP32 | 27.7 | 539 ms | 291 ms | **187 ms** | 106 MB |
 | Detector INT8 | 12.2 | 717 ms | 406 ms | 278 ms | 133 MB |
 | Species FP32 (per box) | 201 | 1,010 ms | 521 ms | 298 ms | 265 MB |
-| Re-ID FP32 | 83.8 | 538 ms | 276 ms | 178 ms | 131 MB |
-| Re-ID INT8 | 22.7 | 355 ms | 182 ms | **117 ms** | 69 MB |
 
-On 4 threads an empty frame costs one detector pass (~0.2 s for the model, ~0.4 s with
-decoding and resizing a 4K JPEG in Python), and a frame with an animal adds ~0.3 s per box
-for the species model, so the whole pipeline needs well under 1 GB of RAM and runs at 1-3
-frames a second. Camera traps fire in occasional bursts of a few photos, so there is room
-even if a Pi turns out several times slower; a continuous video feed would need frame
-skipping (the live script samples 2 fps) or an accelerator.
-
-INT8 helps re-ID (1.5x faster, half the memory) and hurts the detector on this CPU (1.5x
-slower: the quantise/dequantise steps cost more than the integer maths saves without
-VNNI). ARM chips with dot-product instructions are where INT8 usually pays off, so the
-detector choice should be re-checked on the device.
-
-### Not done
-
-- **A real device.** No Pi or Jetson numbers. `28_benchmark.py` and `26_live.py` are ready
-  to run on one unchanged.
-- **GPU / TensorRT and an ARM64 CI runner** were in the plan; I didn't set them up.
-- **INT8 species model**, see above. A smaller species network trained on these groups
-  (or quantisation-aware training) is the next step if the Pi is too slow in FP32.
-- **Site calibration.** The keep threshold comes from SWG val cameras. Phases 3 and 5
-  showed thresholds don't transfer; a real deployment should re-tune it from a few days
-  of reviewed triggers (the Phase 5 dashboard does exactly that for re-ID).
-- **Power** wasn't measured (needs the device and a USB power meter).
+On four threads, the detector model takes about 0.2 seconds per frame, and the
+species model adds about 0.3 seconds per box. These measurements describe the laptop
+only; device speed, power consumption and field reliability have not been measured.
+The default detector and species models stay in FP32 because INT8 reduced accuracy
+and made the detector slower on this CPU.
 
 ## Repository layout
 
-```
-configs/phase1.yaml        dataset, sampling, detector, evaluation settings
-configs/phase2.yaml        bigger sample for classification, crop and split settings
-configs/phase3.yaml        leopard datasets, crops, split by individual, re-ID models
-configs/phase4.yaml        search: index, models, filters, species word lists
-configs/phase5.yaml        review export: models, threshold, audit sample
-configs/phase6.yaml        camera pipeline: models, operating point, event grouping
-src/ghats/                 coco_ct (metadata), events, metrics, filters, crops, detector wrapper, baselines, reid, reid_model, review,
-                           edge (numpy detector post-processing), live (camera pipeline; numpy + onnxruntime only),
-                           search (query parsing, filters, ranking), search_service (what the search server returns)
-scripts/01..05             fetch -> detect -> evaluate -> gallery -> filter experiments
-scripts/06..11             crops -> classifier -> baselines -> event eval -> miss gallery -> speciesnet probe
-scripts/12..15             leopard crops -> re-ID baseline -> ArcFace fine-tune -> open set (Phase 3)
-scripts/16..21             LeopardID102: manifest -> crops -> flank classifier -> zero-shot re-ID -> compare -> travel prior
-scripts/22                 export model outputs for the dashboard (Phase 5)
-scripts/23..28             ONNX export -> INT8 -> accuracy check -> live pipeline -> bandwidth -> benchmark (Phase 6)
-scripts/29..32             embed frames and crops -> search eval -> search server -> by-eye gallery (Phase 4)
-requirements-pi.txt        what a camera needs (numpy, Pillow, PyYAML, onnxruntime; OpenCV for video)
-dashboard/server           review API: Node.js, TypeScript, Express, SQLite
-dashboard/web              review UI: React, TypeScript, Vite
-tests/                     unit tests + synthetic end-to-end pipeline test
-reports/phase1..6/          generated results and screenshots (committed)
+```text
+configs/                  sampling, model, search, review and runtime settings
+src/ghats/                detection, classification, evaluation, search and runtime code
+scripts/01..05            fetch, detect, evaluate and inspect filtering errors
+scripts/06..11            crops, classifier training, baselines and species evaluation
+scripts/22_export_review.py  export predictions for the dashboard
+scripts/23..28            ONNX export, quantisation, evaluation, runtime and benchmarks
+scripts/29..32            embeddings, search evaluation, server and visual inspection
+dashboard/server/         Express + TypeScript review API backed by SQLite
+dashboard/web/            React + TypeScript dashboard
+requirements-pi.txt       minimal camera runtime dependencies
+tests/                    unit and synthetic pipeline tests
+reports/                  evaluation reports, plots and screenshots
 ```
 
 ## Data and models
@@ -960,7 +558,5 @@ reports/phase1..6/          generated results and screenshots (committed)
   *Northern and Central Annamites Camera Traps 2.0*, IUCN SSC Asian Wild Cattle
   Specialist Group's Saola Working Group.
 - MegaDetector V6 via [PyTorch-Wildlife](https://github.com/microsoft/CameraTraps).
-- Leopard ID 2022, CDLA-Permissive-1.0, Wild Me and Botswana Predator Conservation Trust, via LILA BC.
-- LeopardID102, CC BY-NC-SA 4.0, via Hugging Face (WildCAT-Datasets). Non-commercial; images are not in this repo.
-- DINOv2 (Meta) via timm; SpeciesNet (Google) weights from Addax Data Science.
+- ConvNeXt-Tiny via timm; SpeciesNet (Google) weights from Addax Data Science.
 - BioCLIP 2 (Imageomics, MIT) and OpenAI CLIP ViT-B/16 (timm copy, Apache-2.0) via open_clip.
